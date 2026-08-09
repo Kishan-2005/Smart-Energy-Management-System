@@ -24,7 +24,7 @@ export const LiveEnergy: React.FC = () => {
     let reconnectTimeout: number;
 
     const connectWS = () => {
-      ws = new WebSocket('ws://localhost:8000/api/v1/energy/ws');
+      ws = new WebSocket('ws://127.0.0.1:8000/api/v1/energy/ws');
 
       ws.onmessage = (event) => {
         try {

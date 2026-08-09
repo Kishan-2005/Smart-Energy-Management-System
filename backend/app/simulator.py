@@ -81,6 +81,10 @@ async def run_smart_meter_simulator():
             energy_delta = active_power / 3600.0
             cumulative_energy += energy_delta
 
+            # 2.5 Run NILM disaggregation predictions
+            from app.nilm_model import predict_disaggregated_loads
+            ai_preds = predict_disaggregated_loads(active_power, timestamp)
+
             # 3. Formulate payload
             payload = {
                 "timestamp": timestamp.isoformat() + "Z",
@@ -90,7 +94,8 @@ async def run_smart_meter_simulator():
                 "frequency": round(frequency, 2),
                 "power_factor": round(power_factor, 2),
                 "energy_consumed_kwh": round(cumulative_energy, 4),
-                "grid_status": "grid" if active_power > 1.2 else "solar"
+                "grid_status": "grid" if active_power > 1.2 else "solar",
+                "ai_predictions": ai_preds
             }
 
             # 4. Stream payload to all active WebSocket sessions

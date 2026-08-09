@@ -15,9 +15,13 @@ try:
     # Initial AI model training run so pickle exists
     from app.db import SessionLocal
     from app.forecaster import train_energy_model
+    from app.nilm_model import train_nilm_models
     db = SessionLocal()
     try:
         train_energy_model(db)
+        train_nilm_models()
+    except Exception as err:
+        print(f"Model training initialization warning: {err}")
     finally:
         db.close()
 except Exception as e:

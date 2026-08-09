@@ -108,3 +108,37 @@ class DashboardStats(BaseModel):
     grid_dependence_percent: float
     savings_this_month: float
     co2_saved_kg: float
+
+# Weather Schemas
+class WeatherMetricBase(BaseModel):
+    temperature: float
+    humidity: float
+    wind_speed: float
+    cloud_cover: float
+    condition: str
+    location: str
+
+class WeatherMetricCreate(WeatherMetricBase):
+    timestamp: Optional[datetime] = None
+
+class WeatherMetricResponse(WeatherMetricBase):
+    id: int
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class WeatherForecastCard(BaseModel):
+    day: str
+    temp: str
+    condition: str
+    humidity: float
+    wind_speed: float
+    cloud_cover: float
+    solar_score: float
+
+class WeatherResponse(BaseModel):
+    current: WeatherMetricResponse
+    forecast: List[WeatherForecastCard]
+    integration_type: str  # "live" or "demo"
+

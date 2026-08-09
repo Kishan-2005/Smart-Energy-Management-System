@@ -5,9 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSoc
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User, EnergyMetric, ApplianceMetric, SolarForecastMetric, CostRecommendation
-from app.schemas import DashboardStats, EnergyMetricResponse, ApplianceMetricResponse, ApplianceToggle, SolarForecastResponse, CostRecommendationResponse, CostRecommendationUpdate
+from app.schemas import DashboardStats, EnergyMetricResponse, ApplianceMetricResponse, ApplianceToggle, SolarForecastResponse, CostRecommendationResponse, CostRecommendationUpdate, WeatherResponse
 from app.routers.auth import get_current_user
-from app.forecaster import predict_next_24h_demand, predict_solar_generation, train_energy_model
+from app.forecaster import get_forecast_payload, predict_solar_generation, train_energy_model
+from app.weather_service import sync_weather
+from app.solcast_service import sync_solcast
+
+
 
 router = APIRouter(prefix="/energy", tags=["Energy Analytics"])
 
@@ -219,10 +223,12 @@ def get_forecast_data(db: Session = Depends(get_db), current_user: User = Depend
     if db.query(ApplianceMetric).count() == 0:
         seed_database(db)
 
-    # Let's return historical list (last 12 hours) and AI predictions (next 24 hours)
+    # 1. Fetch recursive forecasts from the trained XGBoost model
+    from app.forecaster import get_forecast_payload
+    payload = get_forecast_payload(db)
+
+    # 2. Fetch historical baseline (last 12 hours) for graph alignment
     now = datetime.datetime.utcnow()
-    
-    # 1. Historical data (12 hours back)
     historical = []
     for i in range(12, 0, -1):
         ts = now - datetime.timedelta(hours=i)
@@ -231,43 +237,15 @@ def get_forecast_data(db: Session = Depends(get_db), current_user: User = Depend
         historical.append({
             "timestamp": ts.isoformat() + "Z",
             "hour_label": f"{hour}:00",
-            "actual_kwh": round(base_load + random.uniform(-0.2, 0.2), 2),
+            "actual_kwh": round(base_load + random.uniform(-0.15, 0.15), 2),
             "predicted_kwh": round(base_load, 2)
-        })
-
-    # 2. AI model predictions (next 24 hours)
-    predictions = predict_next_24h_demand(db)
-    if not predictions:
-        # Fallback to mock curve if model can't build
-        for i in range(24):
-            ts = now + datetime.timedelta(hours=i)
-            hour = ts.hour
-            base_load = 0.5 + 1.2 * math_bell_curve(hour, 8, 2) + 2.1 * math_bell_curve(hour, 19, 2)
-            predictions.append({
-                "timestamp": ts.isoformat() + "Z",
-                "hour_label": f"{hour}:00",
-                "predicted_kwh": round(base_load, 3),
-                "confidence_upper": round(base_load * 1.15, 3),
-                "confidence_lower": round(base_load * 0.85, 3)
-            })
-
-    # 3. 7-Day Day-by-Day Forecast
-    seven_day_forecast = []
-    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    today_idx = datetime.datetime.today().weekday()
-    for i in range(7):
-        day_name = days[(today_idx + i) % 7]
-        predicted_daily = random.uniform(14.0, 22.0)
-        seven_day_forecast.append({
-            "day": day_name,
-            "predicted_kwh": round(predicted_daily, 2),
-            "historical_avg_kwh": round(predicted_daily + random.uniform(-2.0, 2.0), 2)
         })
 
     return {
         "historical_12h": historical,
-        "forecast_24h": predictions,
-        "forecast_7d": seven_day_forecast
+        "next_hour": payload["next_hour"],
+        "forecast_24h": payload["next_24h"],
+        "forecast_7d": payload["next_7days"]
     }
 
 # POST /train: Retrain AI model
@@ -318,58 +296,97 @@ def toggle_appliance(appliance_id: int, toggle: ApplianceToggle, db: Session = D
 
 # GET /solar: Solar forecasts & Battery analytics
 @router.get("/solar")
-def get_solar_analytics(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if db.query(SolarForecastMetric).count() == 0:
-        seed_database(db)
+def get_solar_analytics(
+    api_key: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    location: Optional[str] = None,
+    solcast_api_key: Optional[str] = None,
+    solcast_resource_id: Optional[str] = None,
+    capacity: Optional[float] = 6.5,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Sync weather first, which retrieves weather forecast list
+    current_m, forecast_list, weather_mode = sync_weather(
+        db, 
+        force=False,
+        api_key=api_key,
+        lat=lat,
+        lon=lon,
+        location=location
+    )
 
-    forecasts = db.query(SolarForecastMetric).all()
-    
-    # Solar generation data hourly for graphs
-    hourly_solar = []
-    for f in forecasts[:16]: # return next 16 hours
-        hour = f.timestamp.hour
-        hourly_solar.append({
-            "time": f"{hour}:00",
-            "generation_kw": f.predicted_generation,
-            "irradiance": f.solar_irradiance,
-            "weather": f.weather_condition
-        })
-
-    # Weather forecast cards details
-    weather_forecast = [
-        {"day": "Today", "temp": "28°C", "condition": "Sunny", "solar_score": 9.5},
-        {"day": "Tomorrow", "temp": "26°C", "condition": "Partly Cloudy", "solar_score": 8.0},
-        {"day": "Day After", "temp": "24°C", "condition": "Overcast", "solar_score": 4.5},
-        {"day": "Saturday", "temp": "29°C", "condition": "Sunny", "solar_score": 9.8},
-        {"day": "Sunday", "temp": "30°C", "condition": "Sunny", "solar_score": 10.0}
-    ]
-
-    # Battery SOC cycle profile (hourly simulation)
-    battery_soc_curve = []
-    soc = 80.0
-    for hour in range(24):
-        # Charge during day solar peak (10am-4pm)
-        if 10 <= hour <= 16:
-            soc = min(100.0, soc + 8.5)
-        # Discharge during peak loads (6pm-10pm)
-        elif 18 <= hour <= 22:
-            soc = max(15.0, soc - 12.0)
-        # Slowly discharge or hold overnight
-        else:
-            soc = max(15.0, soc - 1.5)
-            
-        battery_soc_curve.append({
-            "hour": f"{hour}:00",
-            "soc_percent": round(soc, 1)
-        })
+    # 2. Sync Solcast solar forecasts and battery SOC charge cycles
+    solcast_hourly_solar, battery_soc_curve, solcast_mode = sync_solcast(
+        db,
+        force=False,
+        api_key=solcast_api_key,
+        resource_id=solcast_resource_id,
+        lat=lat,
+        lon=lon,
+        capacity=capacity or 6.5
+    )
 
     return {
-        "hourly_solar": hourly_solar,
-        "weather_forecast": weather_forecast,
+        "hourly_solar": solcast_hourly_solar,
+        "weather_forecast": forecast_list,
         "battery_soc_curve": battery_soc_curve,
-        "system_capacity_kw": 6.5,
-        "battery_capacity_kwh": 13.5
+        "system_capacity_kw": capacity or 6.5,
+        "battery_capacity_kwh": 13.5,
+        "solcast_integration_type": solcast_mode
     }
+
+
+# GET /weather: Current and forecast weather
+@router.get("/weather", response_model=WeatherResponse)
+def get_weather(
+    api_key: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    location: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    current_m, forecast_list, integration_mode = sync_weather(
+        db, 
+        force=False,
+        api_key=api_key,
+        lat=lat,
+        lon=lon,
+        location=location
+    )
+    return {
+        "current": current_m,
+        "forecast": forecast_list,
+        "integration_type": integration_mode
+    }
+
+# POST /weather/refresh: Force refresh weather
+@router.post("/weather/refresh", response_model=WeatherResponse)
+def refresh_weather(
+    api_key: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    location: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    current_m, forecast_list, integration_mode = sync_weather(
+        db, 
+        force=True,
+        api_key=api_key,
+        lat=lat,
+        lon=lon,
+        location=location
+    )
+    return {
+        "current": current_m,
+        "forecast": forecast_list,
+        "integration_type": integration_mode
+    }
+
+
 
 # GET /cost/optimizer: Recommendations & Tariff structures
 @router.get("/cost/optimizer")

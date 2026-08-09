@@ -54,3 +54,16 @@ class CostRecommendation(Base):
     potential_saving = Column(Float, default=0.0)       # $ / Rupees
     status = Column(String, default="pending")          # pending, applied, dismissed
     actionable_type = Column(String, default="shift_load")
+
+class WeatherMetric(Base):
+    __tablename__ = "weather_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, index=True, default=datetime.datetime.utcnow)
+    temperature = Column(Float, nullable=False)       # Celsius
+    humidity = Column(Float, nullable=False)          # %
+    wind_speed = Column(Float, nullable=False)        # m/s
+    cloud_cover = Column(Float, nullable=False)       # %
+    condition = Column(String, nullable=False)        # e.g., "Clear", "Clouds", "Rain"
+    location = Column(String, nullable=False)
+

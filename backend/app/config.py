@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -11,7 +12,19 @@ class Settings(BaseSettings):
     # Database URL, default to postgresql with sqlite fallback handled in db.py
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/auraenergy")
 
+    # OpenWeatherMap Integration settings
+    OPENWEATHERMAP_API_KEY: Optional[str] = os.getenv("OPENWEATHERMAP_API_KEY", None)
+    LOCATION_LATITUDE: float = float(os.getenv("LOCATION_LATITUDE", "12.9716"))
+    LOCATION_LONGITUDE: float = float(os.getenv("LOCATION_LONGITUDE", "77.5946"))
+    LOCATION_NAME: str = os.getenv("LOCATION_NAME", "Bengaluru")
+
+    # Solcast Integration settings
+    SOLCAST_API_KEY: Optional[str] = os.getenv("SOLCAST_API_KEY", None)
+    SOLCAST_RESOURCE_ID: Optional[str] = os.getenv("SOLCAST_RESOURCE_ID", None)
+
+
     class Config:
         case_sensitive = True
 
 settings = Settings()
+
