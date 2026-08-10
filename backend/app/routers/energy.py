@@ -10,6 +10,8 @@ from app.routers.auth import get_current_user
 from app.forecaster import get_forecast_payload, predict_solar_generation, train_energy_model
 from app.weather_service import sync_weather
 from app.solcast_service import sync_solcast
+from app.recommendation_engine import generate_recommendations
+
 
 
 
@@ -391,10 +393,8 @@ def refresh_weather(
 # GET /cost/optimizer: Recommendations & Tariff structures
 @router.get("/cost/optimizer")
 def get_cost_optimization(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if db.query(CostRecommendation).count() == 0:
-        seed_database(db)
-
-    recommendations = db.query(CostRecommendation).all()
+    # Run the dynamic AI recommendation engine
+    recommendations = generate_recommendations(db)
 
     # Time-of-use tariffs structure
     tariffs = [
@@ -404,12 +404,25 @@ def get_cost_optimization(db: Session = Depends(get_db), current_user: User = De
         {"time": "21:00 - 24:00", "rate": 0.12, "type": "Off-Peak", "color": "#10B981"}
     ]
 
+    # Calculate dynamic potential monthly savings based on pending recommendations
+    potential_savings = sum(r.potential_saving for r in recommendations if r.status == "pending")
+
+    # Generate custom appliance scheduling recommendations
+    optimal_schedule = [
+        {"appliance": "Electric Vehicle (EV) Charger", "recommended_time": "02:00 AM - 06:00 AM", "reason": "Super Off-Peak Grid Rates ($0.08/kWh)", "icon": "Car"},
+        {"appliance": "Washing Machine & Dryer", "recommended_time": "11:00 AM - 02:00 PM", "reason": "Matches Peak Solar Production Surplus", "icon": "Pocket"},
+        {"appliance": "Battery Storage Charging", "recommended_time": "10:00 AM - 03:00 PM", "reason": "Store Mid-Day Solar Surpluses", "icon": "BatteryCharging"},
+        {"appliance": "Air Conditioning (AC)", "recommended_time": "02:00 PM - 04:00 PM (Pre-cool)", "reason": "Pre-cooling lowers evening load spikes", "icon": "Thermometer"}
+    ]
+
     return {
         "recommendations": recommendations,
         "tariffs": tariffs,
-        "monthly_potential_savings": 28.50,
-        "billing_cycle_progress": 65  # percentage
+        "monthly_potential_savings": round(potential_savings, 2),
+        "billing_cycle_progress": 65,  # percentage
+        "optimal_schedule": optimal_schedule
     }
+
 
 # PUT /cost/optimizer/recommendations/{rec_id}
 @router.put("/cost/optimizer/recommendations/{rec_id}", response_model=CostRecommendationResponse)
