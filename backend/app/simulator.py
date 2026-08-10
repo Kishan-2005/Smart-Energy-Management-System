@@ -28,12 +28,23 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Battery simulation state
+battery_soc = 68.0
+battery_target_soc = 90.0
+battery_charging_active = False
+battery_charge_rate_kw = 0.0
+
+def set_battery_charge(target_soc: float, charge_active: bool):
+    global battery_target_soc, battery_charging_active
+    battery_target_soc = target_soc
+    battery_charging_active = charge_active
+
 # Background task cancellation handle
 simulator_task = None
 is_running = False
 
 async def run_smart_meter_simulator():
-    global is_running
+    global is_running, battery_soc, battery_target_soc, battery_charging_active, battery_charge_rate_kw
     is_running = True
     print("[SIMULATOR] Starting Smart Meter Simulator async task...")
     
@@ -44,8 +55,6 @@ async def run_smart_meter_simulator():
         cumulative_energy = last_metric.energy_consumed_kwh if last_metric else 125.40
     finally:
         db.close()
-
-
 
     while is_running:
         try:
@@ -64,6 +73,33 @@ async def run_smart_meter_simulator():
             if active_power == 0:
                 active_power = 0.45  # baseline standby load (router, fridge idle, etc.)
                 
+            # Simulated natural solar power for current hour
+            now_hour = datetime.datetime.utcnow().hour
+            curr_solar = 0.0
+            if 6 <= now_hour <= 18:
+                # curve peaking around 12 PM
+                import math
+                bell = math.exp(-0.5 * ((now_hour - 12) / 2.5) ** 2)
+                curr_solar = bell * 4.2
+
+            # Dynamic battery charging load
+            if battery_charging_active:
+                if battery_soc < battery_target_soc:
+                    battery_charge_rate_kw = 3.0
+                    # Rise by 0.5% per second to make it fast and responsive in simulation
+                    battery_soc = min(battery_target_soc, battery_soc + 0.5)
+                    active_power += battery_charge_rate_kw
+                else:
+                    battery_charging_active = False
+                    battery_charge_rate_kw = 0.0
+            else:
+                battery_charge_rate_kw = 0.0
+                # Natural slow discharge/charge logic if not overriding
+                if curr_solar > active_power:
+                    battery_soc = min(100.0, battery_soc + 0.05)
+                else:
+                    battery_soc = max(15.0, battery_soc - 0.02)
+
             # Add small random fluctuations (noise)
             active_power = max(0.1, active_power + random.uniform(-0.08, 0.08))
             
@@ -95,7 +131,12 @@ async def run_smart_meter_simulator():
                 "power_factor": round(power_factor, 2),
                 "energy_consumed_kwh": round(cumulative_energy, 4),
                 "grid_status": "grid" if active_power > 1.2 else "solar",
-                "ai_predictions": ai_preds
+                "ai_predictions": ai_preds,
+                # Dynamic Battery Stats
+                "battery_soc": round(battery_soc, 2),
+                "battery_charge_rate_kw": round(battery_charge_rate_kw, 2),
+                "battery_charging_active": battery_charging_active,
+                "battery_target_soc": round(battery_target_soc, 2)
             }
 
             # 4. Stream payload to all active WebSocket sessions

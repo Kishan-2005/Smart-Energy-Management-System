@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSoc
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User, EnergyMetric, ApplianceMetric, SolarForecastMetric, CostRecommendation
-from app.schemas import DashboardStats, EnergyMetricResponse, ApplianceMetricResponse, ApplianceToggle, SolarForecastResponse, CostRecommendationResponse, CostRecommendationUpdate, WeatherResponse
+from app.schemas import DashboardStats, EnergyMetricResponse, ApplianceMetricResponse, ApplianceToggle, SolarForecastResponse, CostRecommendationResponse, CostRecommendationUpdate, WeatherResponse, BatteryChargeRequest
 from app.routers.auth import get_current_user
 from app.forecaster import get_forecast_payload, predict_solar_generation, train_energy_model
 from app.weather_service import sync_weather
@@ -148,15 +148,10 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
         bell = max(0.0, 1.0 - abs(hour - 12) / 6)
         curr_solar = bell * 4.2
 
-    # Battery mock indicators
-    battery_soc = 68.0
-    battery_charge_rate = -0.45  # negative represents discharging slightly, positive charging
-    if curr_solar > current_load:
-        battery_charge_rate = round(curr_solar - current_load, 2)
-        battery_soc = min(100.0, battery_soc + 2.0)
-    else:
-        battery_charge_rate = round(curr_solar - current_load, 2)
-        battery_soc = max(10.0, battery_soc - 1.2)
+    # Battery mock indicators from simulator
+    from app.simulator import battery_soc as sim_battery_soc, battery_charge_rate_kw as sim_battery_charge_rate
+    battery_soc = sim_battery_soc
+    battery_charge_rate = sim_battery_charge_rate if sim_battery_charge_rate > 0 else round(curr_solar - current_load, 2)
 
     # Fetch total consumption from the database metrics
     metrics_24h = db.query(EnergyMetric).order_by(EnergyMetric.timestamp.desc()).limit(24).all()
@@ -390,6 +385,18 @@ def refresh_weather(
 
 
 
+# POST /battery/charge
+@router.post("/battery/charge")
+def set_battery_charge_route(payload: BatteryChargeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from app.simulator import set_battery_charge
+    set_battery_charge(payload.target_soc, payload.charge_active)
+    return {
+        "status": "success",
+        "target_soc": payload.target_soc,
+        "charge_active": payload.charge_active
+    }
+
+
 # GET /cost/optimizer: Recommendations & Tariff structures
 @router.get("/cost/optimizer")
 def get_cost_optimization(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -408,19 +415,60 @@ def get_cost_optimization(db: Session = Depends(get_db), current_user: User = De
     potential_savings = sum(r.potential_saving for r in recommendations if r.status == "pending")
 
     # Generate custom appliance scheduling recommendations
-    optimal_schedule = [
-        {"appliance": "Electric Vehicle (EV) Charger", "recommended_time": "02:00 AM - 06:00 AM", "reason": "Super Off-Peak Grid Rates ($0.08/kWh)", "icon": "Car"},
-        {"appliance": "Washing Machine & Dryer", "recommended_time": "11:00 AM - 02:00 PM", "reason": "Matches Peak Solar Production Surplus", "icon": "Pocket"},
-        {"appliance": "Battery Storage Charging", "recommended_time": "10:00 AM - 03:00 PM", "reason": "Store Mid-Day Solar Surpluses", "icon": "BatteryCharging"},
-        {"appliance": "Air Conditioning (AC)", "recommended_time": "02:00 PM - 04:00 PM (Pre-cool)", "reason": "Pre-cooling lowers evening load spikes", "icon": "Thermometer"}
-    ]
+    appliances = db.query(ApplianceMetric).all()
+    today_forecasts = [sf for sf in db.query(SolarForecastMetric).all() if sf.timestamp.date() == datetime.datetime.utcnow().date()]
+    peak_solar = max((sf.solar_irradiance for sf in today_forecasts if 9 <= sf.timestamp.hour <= 15), default=0.0)
+    has_midday_solar = peak_solar >= 500
+
+    optimal_schedule = []
+    if any("ev" in (app.appliance_name or "").lower() or "charger" in (app.appliance_name or "").lower() for app in appliances):
+        optimal_schedule.append({
+            "appliance": "EV Charger",
+            "recommended_time": "02:00 AM - 06:00 AM",
+            "reason": "Take advantage of super off-peak grid pricing and avoid evening demand charges.",
+            "icon": "Car"
+        })
+
+    if any("washing" in (app.appliance_name or "").lower() for app in appliances):
+        optimal_schedule.append({
+            "appliance": "Washing Machine & Dryer",
+            "recommended_time": "11:00 AM - 02:00 PM" if has_midday_solar else "09:00 PM - 12:00 AM",
+            "reason": "Run heavy laundry during solar peak or late off-peak hours to reduce peak-grid usage.",
+            "icon": "WashingMachine"
+        })
+
+    optimal_schedule.append({
+        "appliance": "Battery Storage Charging",
+        "recommended_time": "10:00 AM - 03:00 PM" if has_midday_solar else "02:00 AM - 06:00 AM",
+        "reason": "Charge before evening demand to support peak shaving and improve self-consumption.",
+        "icon": "BatteryCharging"
+    })
+
+    optimal_schedule.append({
+        "appliance": "Air Conditioning (AC)",
+        "recommended_time": "02:00 PM - 04:00 PM (Pre-cool)",
+        "reason": "Pre-cooling reduces evening temperature load and lowers peak grid draw.",
+        "icon": "Thermometer"
+    })
+
+    from app.simulator import battery_soc, battery_target_soc, battery_charging_active, battery_charge_rate_kw
+    
+    # Get active states for appliances
+    appliances_list = db.query(ApplianceMetric).all()
+    appliance_states = {app.appliance_name: {"status": app.status, "power": app.power_consumed, "id": app.id} for app in appliances_list}
 
     return {
         "recommendations": recommendations,
         "tariffs": tariffs,
         "monthly_potential_savings": round(potential_savings, 2),
         "billing_cycle_progress": 65,  # percentage
-        "optimal_schedule": optimal_schedule
+        "optimal_schedule": optimal_schedule,
+        # Dynamic interactive states
+        "battery_soc": round(battery_soc, 2),
+        "battery_target_soc": round(battery_target_soc, 2),
+        "battery_charging_active": battery_charging_active,
+        "battery_charge_rate_kw": round(battery_charge_rate_kw, 2),
+        "appliance_states": appliance_states
     }
 
 

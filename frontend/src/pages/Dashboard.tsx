@@ -168,20 +168,20 @@ export const Dashboard: React.FC = () => {
   }, [token]);
 
   // 3. Toggle appliance handler
-  const handleToggleAppliance = async (id: number) => {
+  const handleToggleAppliance = async (id: number, currentStatus: boolean) => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/energy/appliances/toggle', {
+      const res = await fetch(`http://localhost:8000/api/v1/energy/appliances/${id}/toggle`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ appliance_id: id })
+        body: JSON.stringify({ status: !currentStatus })
       });
       if (res.ok) {
         // Toggle status locally in state
         setAppliances(prev => 
-          prev.map(app => app.id === id ? { ...app, status: !app.status } : app)
+          prev.map(app => app.id === id ? { ...app, status: !currentStatus } : app)
         );
         // Refresh slower stats right after toggle
         setTimeout(fetchStats, 200);
@@ -502,7 +502,7 @@ export const Dashboard: React.FC = () => {
                   </div>
                   
                   <button 
-                    onClick={() => handleToggleAppliance(app.id)}
+                    onClick={() => handleToggleAppliance(app.id, app.status)}
                     className="focus:outline-none transition-all duration-200 active:scale-95"
                   >
                     {app.status ? (

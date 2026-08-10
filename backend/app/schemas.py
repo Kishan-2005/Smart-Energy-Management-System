@@ -96,6 +96,10 @@ class CostRecommendationResponse(CostRecommendationBase):
     class Config:
         from_attributes = True
 
+class BatteryChargeRequest(BaseModel):
+    target_soc: float
+    charge_active: bool
+
 # Aggregated Dashboard Stats
 class DashboardStats(BaseModel):
     current_load_kw: float
