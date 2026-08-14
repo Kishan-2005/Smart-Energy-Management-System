@@ -46,38 +46,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
       <aside className={`
         fixed bottom-0 top-0 left-0 z-50 flex w-72 flex-col 
-        border-r border-slate-200/80 bg-white/95 px-6 py-6 
-        transition-transform duration-300 ease-in-out dark:border-slate-800/80 dark:bg-darkbg-card/95
+        border-r border-white/5 bg-slate-950/70 backdrop-blur-xl px-6 py-6 
+        transition-transform duration-300 ease-in-out
         lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Sidebar Header Logo */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-600 to-teal-400 text-white shadow-md shadow-brand-500/20">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-600 to-teal-400 text-white shadow-md shadow-brand-500/30">
               <Zap className="h-5 w-5 fill-current" />
             </div>
             <div>
-              <span className="font-bold text-slate-800 dark:text-white text-lg leading-tight tracking-wide">AuraEnergy</span>
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-brand-500">Intelligent AI</span>
+              <span className="font-extrabold text-white text-lg leading-tight tracking-tight">AuraEnergy</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-400">Intelligent AI</span>
             </div>
           </div>
           <button 
             onClick={onClose} 
-            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white lg:hidden"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white lg:hidden"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* User Card */}
-        <div className="mt-8 flex items-center gap-3 rounded-2xl bg-slate-50 p-4 border border-slate-100 dark:bg-slate-900/50 dark:border-slate-800/50">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400">
+        <div className="mt-8 flex items-center gap-3 rounded-2xl bg-white/5 p-4 border border-white/5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-500/20 text-brand-400 font-bold border border-brand-500/30">
             <span className="font-bold text-sm uppercase">{user?.username.slice(0, 2)}</span>
           </div>
           <div className="overflow-hidden">
-            <span className="block truncate font-semibold text-slate-700 dark:text-slate-200 text-sm">{user?.username}</span>
-            <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-              <Shield className="h-3 w-3 text-brand-500" />
+            <span className="block truncate font-bold text-white text-sm">{user?.username}</span>
+            <div className="flex items-center gap-1 text-[11px] text-slate-400 font-medium">
+              <Shield className="h-3 w-3 text-brand-400" />
               <span className="truncate capitalize">{user?.role?.replace('_', ' ')}</span>
             </div>
           </div>
@@ -93,10 +93,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 to={item.path}
                 onClick={onClose}
                 className={({ isActive }) => `
-                  flex items-center gap-3.5 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200
+                  flex items-center gap-3.5 rounded-xl px-4 py-3 text-sm font-semibold transition-all duration-200
                   ${isActive 
-                    ? 'bg-gradient-to-r from-brand-600 to-brand-500 text-white shadow-md shadow-brand-500/20' 
-                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100'
+                    ? 'bg-gradient-to-r from-brand-600 to-brand-500 text-white shadow-md shadow-brand-500/25 border border-brand-450/20 scale-[1.02]' 
+                    : 'text-slate-400 hover:bg-white/5 hover:text-white'
                   }
                 `}
               >
@@ -108,10 +108,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         </nav>
 
         {/* Sidebar Footer Logout */}
-        <div className="mt-auto border-t border-slate-100 pt-4 dark:border-slate-800/80">
+        <div className="mt-auto border-t border-white/5 pt-4">
           <button
             onClick={logout}
-            className="flex w-full items-center gap-3.5 rounded-xl px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50/50 dark:hover:bg-red-950/20 transition-all duration-200"
+            className="flex w-full items-center gap-3.5 rounded-xl px-4 py-3 text-sm font-semibold text-rose-500 hover:bg-rose-500/5 transition-all duration-200"
           >
             <LogOut className="h-5 w-5" />
             <span>Sign Out</span>

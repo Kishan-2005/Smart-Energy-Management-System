@@ -2,23 +2,26 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  color-scheme: light dark;
+  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  background-color: #060913;
+  color: #f8fafc;
+  overflow-x: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Custom modern scrollbars */
+/* Custom Modern Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -26,51 +29,159 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.25);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.45);
+  background: rgba(255, 255, 255, 0.18);
 }
 
-/* Dark Mode Scrollbars */
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(75, 85, 99, 0.4);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(75, 85, 99, 0.6);
-}
-
-/* Premium Card Glassmorphism and Custom Effects */
+/* Premium Card Glassmorphism */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(13, 18, 30, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.dark .glass-panel {
-  background: rgba(22, 31, 48, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+.glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
 }
 
-.glow-blue {
-  box-shadow: 0 0 20px -5px rgba(14, 160, 234, 0.25);
-}
-
-.dark .glow-blue {
-  box-shadow: 0 0 25px -5px rgba(14, 160, 234, 0.15);
-}
-
-/* Radial background gradient for dashboard views */
+/* Dynamic Radial Background for Dashboard Portal */
 .radial-bg {
-  background: radial-gradient(circle at 10% 20%, rgb(240, 245, 255) 0%, rgb(255, 255, 255) 90%);
+  background: radial-gradient(circle at 50% 0%, rgba(14, 160, 234, 0.08) 0%, rgba(6, 9, 19, 1) 75%);
 }
 
 .dark .radial-bg {
-  background: radial-gradient(circle at 10% 20%, rgb(17, 24, 39) 0%, rgb(11, 15, 25) 100%);
+  background: radial-gradient(circle at 50% 0%, rgba(14, 160, 234, 0.12) 0%, rgba(6, 9, 19, 1) 75%);
+}
+
+/* Glowing Neon Card Borders & Highlights */
+.glow-brand {
+  box-shadow: 0 0 30px -5px rgba(14, 160, 234, 0.2), inset 0 0 12px rgba(14, 160, 234, 0.05);
+  border-color: rgba(14, 160, 234, 0.25);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.15), inset 0 0 12px rgba(16, 185, 129, 0.05);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.glow-rose {
+  box-shadow: 0 0 30px -5px rgba(244, 63, 94, 0.15), inset 0 0 12px rgba(244, 63, 94, 0.05);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.glow-amber {
+  box-shadow: 0 0 30px -5px rgba(245, 158, 11, 0.15), inset 0 0 12px rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+/* Energy Flow SVG Path Animation */
+.flow-path-active {
+  stroke-dasharray: 10, 15;
+  animation: flowAnimation 25s linear infinite;
+}
+
+.flow-path-reverse {
+  stroke-dasharray: 10, 15;
+  animation: flowAnimationReverse 25s linear infinite;
+}
+
+@keyframes flowAnimation {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+@keyframes flowAnimationReverse {
+  to {
+    stroke-dashoffset: 1000;
+  }
+}
+
+/* Glow Pulses */
+.node-pulse-emerald {
+  animation: pulseGlowEmerald 2s infinite alternate;
+}
+
+.node-pulse-brand {
+  animation: pulseGlowBrand 2s infinite alternate;
+}
+
+.node-pulse-rose {
+  animation: pulseGlowRose 2s infinite alternate;
+}
+
+@keyframes pulseGlowEmerald {
+  0% {
+    filter: drop-shadow(0 0 2px rgba(16, 185, 129, 0.5));
+  }
+  100% {
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.9));
+  }
+}
+
+@keyframes pulseGlowBrand {
+  0% {
+    filter: drop-shadow(0 0 2px rgba(14, 160, 234, 0.5));
+  }
+  100% {
+    filter: drop-shadow(0 0 8px rgba(14, 160, 234, 0.9));
+  }
+}
+
+@keyframes pulseGlowRose {
+  0% {
+    filter: drop-shadow(0 0 2px rgba(244, 63, 94, 0.5));
+  }
+  100% {
+    filter: drop-shadow(0 0 8px rgba(244, 63, 94, 0.9));
+  }
+}
+
+/* Wave Liquid Battery animation */
+.wave-battery {
+  position: relative;
+  overflow: hidden;
+}
+
+.wave-battery::after {
+  content: '';
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -150%;
+  left: -50%;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 38%;
+  animation: waveMotion 12s linear infinite;
+  pointer-events: none;
+}
+
+.wave-battery::before {
+  content: '';
+  position: absolute;
+  width: 208%;
+  height: 208%;
+  top: -154%;
+  left: -54%;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 40%;
+  animation: waveMotion 16s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes waveMotion {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }

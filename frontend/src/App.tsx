@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Import feature pages
 import { Dashboard } from './pages/Dashboard';
@@ -20,13 +22,14 @@ import { Settings } from './pages/Settings';
 const ProtectedLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
-          <span className="text-sm font-semibold tracking-wider text-slate-400">Loading your energy portal...</span>
+          <span className="text-sm font-semibold tracking-wider text-slate-450">Loading your energy portal...</span>
         </div>
       </div>
     );
@@ -37,12 +40,24 @@ const ProtectedLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 radial-bg dark:bg-darkbg dark:text-slate-100 lg:pl-72">
+    <div className="min-h-screen bg-slate-950 text-slate-100 radial-bg lg:pl-72">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex flex-col">
         <Navbar onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto animate-fade-in">
-          {children}
+        <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto overflow-hidden">
+          <ErrorBoundary>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

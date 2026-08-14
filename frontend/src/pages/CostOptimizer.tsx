@@ -5,17 +5,18 @@ import {
   CheckCircle2, 
   AlertCircle, 
   RefreshCw, 
-  Battery, 
+  Battery as BatteryIcon, 
   BatteryCharging, 
   Clock, 
   Zap, 
   Tv, 
   Thermometer, 
   Car, 
-  Lightbulb, 
-  Sliders 
+  Sliders,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CardSkeleton, ListSkeleton } from '../components/LoadingSkeleton';
 
 interface Recommendation {
   id: number;
@@ -47,6 +48,119 @@ interface ApplianceState {
   id: number;
 }
 
+// --------------------------------------------------------
+// SUB-COMPONENT: LIQUID BATTERY WIDGET
+// --------------------------------------------------------
+interface LiquidBatteryProps {
+  soc: number;
+  charging: boolean;
+  rate: number;
+}
+
+const LiquidBattery: React.FC<LiquidBatteryProps> = ({ soc, charging, rate }) => {
+  return (
+    <div className="relative w-32 h-52 mx-auto flex flex-col justify-end items-center border-4 border-slate-800 rounded-[28px] p-1.5 bg-slate-950/60 shadow-inner select-none">
+      {/* Battery Tip */}
+      <div className="absolute -top-3.5 w-10 h-3 bg-slate-800 rounded-t-lg" />
+      
+      {/* Waves Level box */}
+      <div 
+        className={`w-full rounded-[20px] wave-battery transition-all duration-1000 relative overflow-hidden flex items-center justify-center ${
+          charging 
+            ? 'bg-gradient-to-t from-emerald-600/90 to-teal-400/90 shadow-[0_0_20px_rgba(16,185,129,0.3)]' 
+            : 'bg-gradient-to-t from-brand-600/90 to-cyan-400/90 shadow-[0_0_20px_rgba(14,160,234,0.3)]'
+        }`}
+        style={{ height: `${Math.max(12, soc)}%` }}
+      >
+        {/* Floating Percentage Indicator */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-20">
+          <span className="text-3xl font-black tracking-tight">{soc.toFixed(0)}%</span>
+          <span className="text-[9px] font-extrabold uppercase tracking-widest opacity-80 mt-0.5">
+            {charging ? `+${rate.toFixed(1)} kW` : 'Stored'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --------------------------------------------------------
+// SUB-COMPONENT: THERMOSTAT ECO CONTROL
+// --------------------------------------------------------
+interface ThermostatControlProps {
+  r: Recommendation;
+  acState: ApplianceState | undefined;
+  token: string | null;
+  handleApply: (id: number, currentStatus: string) => Promise<void>;
+  fetchOptimizer: () => Promise<void>;
+}
+
+const ThermostatControl: React.FC<ThermostatControlProps> = ({
+  r,
+  acState,
+  token,
+  handleApply,
+  fetchOptimizer
+}) => {
+  const isACOn = acState?.status ?? false;
+  const acPower = acState?.power ?? 0;
+  const [temp, setTemp] = useState(21.0);
+
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="flex justify-between items-center text-slate-400">
+        <span>Air Conditioner Status:</span>
+        <span className={`font-bold flex items-center gap-1.5 ${isACOn ? 'text-blue-455' : 'text-slate-500'}`}>
+          <span className={`h-2 w-2 rounded-full ${isACOn ? 'bg-blue-400 animate-pulse' : 'bg-slate-650'}`} />
+          {isACOn ? `Active (${acPower.toFixed(2)} kW)` : 'Inactive / Off'}
+        </span>
+      </div>
+
+      {isACOn && (
+        <div className="space-y-3 p-3.5 bg-white/5 border border-white/5 rounded-2xl">
+          <div className="flex justify-between items-center">
+            <span className="text-[11px] text-slate-400">Current Temperature Setpoint:</span>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setTemp(t => Math.max(16.0, t - 0.5))}
+                className="w-7 h-7 rounded-lg bg-white/5 font-extrabold flex items-center justify-center hover:bg-white/10 active:scale-90 transition-all text-sm text-white"
+              >
+                -
+              </button>
+              <span className="font-black text-white text-sm w-12 text-center">{temp.toFixed(1)}°C</span>
+              <button 
+                onClick={() => setTemp(t => Math.min(30.0, t + 0.5))}
+                className="w-7 h-7 rounded-lg bg-white/5 font-extrabold flex items-center justify-center hover:bg-white/10 active:scale-90 transition-all text-sm text-white"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={async () => {
+                setTemp(23.5);
+                await handleApply(r.id, r.status);
+                fetchOptimizer();
+              }}
+              className={`rounded-lg px-3.5 py-1.5 font-bold transition-all text-xs active:scale-95 ${
+                r.status === 'applied'
+                  ? 'bg-white/10 text-slate-300 hover:bg-white/20'
+                  : 'bg-brand-650 text-white hover:bg-brand-550 border border-brand-550/20'
+              }`}
+            >
+              {r.status === 'applied' ? 'Eco Setpoint Active' : 'Optimize Setpoint (23.5°C)'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --------------------------------------------------------
+// MAIN OPTIMIZER COMPONENT
+// --------------------------------------------------------
 export const CostOptimizer: React.FC = () => {
   const { token } = useAuth();
   const [recs, setRecs] = useState<Recommendation[]>([]);
@@ -197,35 +311,35 @@ export const CostOptimizer: React.FC = () => {
     
     return (
       <div className="space-y-4 text-xs">
-        <div className="flex items-center justify-between text-slate-500">
+        <div className="flex items-center justify-between text-slate-450">
           <span>Washing Machine Status:</span>
-          <span className={`font-bold flex items-center gap-1.5 ${isWMRunning ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'}`}>
-            <span className={`h-2 w-2 rounded-full ${isWMRunning ? 'bg-amber-500 animate-ping' : 'bg-slate-400'}`} />
+          <span className={`font-bold flex items-center gap-1.5 ${isWMRunning ? 'text-amber-400' : 'text-slate-500'}`}>
+            <span className={`h-2 w-2 rounded-full ${isWMRunning ? 'bg-amber-400 animate-ping' : 'bg-slate-650'}`} />
             {isWMRunning ? `Running (${wmPower.toFixed(2)} kW)` : 'Idle / Ready'}
           </span>
         </div>
         
         {isWMRunning ? (
-          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/40">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center bg-white/5 p-3 rounded-2xl border border-white/5">
             <span className="text-[11px] text-slate-400 leading-normal">
               Shift this run to nighttime off-peak hours (9 PM - 6 AM) or midday solar surplus (11 AM - 2 PM) to save billing charges.
             </span>
             <button
               onClick={() => handleApplianceToggle(wmState.id, true, r)}
-              className="whitespace-nowrap rounded-lg bg-amber-500 text-white font-bold px-3 py-1.5 hover:bg-amber-600 transition-all text-xs active:scale-95 shadow-sm shadow-amber-500/10"
+              className="whitespace-nowrap rounded-lg bg-amber-500 text-white font-bold px-3.5 py-2 hover:bg-amber-600 transition-all text-xs active:scale-95 shadow-sm shadow-amber-500/10"
             >
               Postpone & Shift Now
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/40">
-            <span className="text-[11px] text-slate-400">Automatic off-peak schedule configuration rules.</span>
+          <div className="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/5">
+            <span className="text-[11px] text-slate-450">Automatic off-peak schedule configuration rules.</span>
             <button
               onClick={() => handleApply(r.id, r.status)}
-              className={`rounded-lg px-3 py-1.5 font-semibold text-xs transition-all active:scale-95 ${
+              className={`rounded-lg px-3.5 py-2 font-bold text-xs transition-all active:scale-95 ${
                 r.status === 'applied' 
-                  ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-350 hover:bg-slate-300 dark:hover:bg-slate-700' 
-                  : 'bg-brand-600 text-white hover:bg-brand-500'
+                  ? 'bg-white/10 text-slate-300 hover:bg-white/20' 
+                  : 'bg-brand-650 text-white hover:bg-brand-550 border border-brand-550/20'
               }`}
             >
               {r.status === 'applied' ? 'Applied Schedule' : 'Schedule Next Load'}
@@ -239,62 +353,59 @@ export const CostOptimizer: React.FC = () => {
   const renderBatteryControl = (r: Recommendation) => {
     return (
       <div className="space-y-4 text-xs">
-        {/* Battery SOC */}
-        <div className="space-y-1.5">
-          <div className="flex justify-between font-medium text-slate-400">
-            <span>Battery Charge Level</span>
-            <span className="font-bold text-slate-700 dark:text-slate-200">{batterySoc.toFixed(1)}%</span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-            <div 
-              className={`h-full transition-all duration-500 ${batteryChargingActive ? 'bg-emerald-500 animate-pulse' : 'bg-brand-500'}`} 
-              style={{ width: `${batterySoc}%` }} 
-            />
-          </div>
-        </div>
-
-        {/* Target SOC slider */}
-        <div className="space-y-1">
-          <div className="flex justify-between font-medium text-slate-400">
-            <span>Target SOC limit</span>
-            <span className="font-bold text-brand-500">{batteryTargetSoc}%</span>
-          </div>
-          <input 
-            type="range"
-            min="60"
-            max="100"
-            value={batteryTargetSoc}
-            disabled={batteryChargingActive}
-            onChange={(e) => setBatteryTargetSoc(parseInt(e.target.value))}
-            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-slate-200 dark:bg-slate-800 accent-brand-500 disabled:opacity-50"
+        {/* Custom liquid battery widget */}
+        <div className="grid gap-6 md:grid-cols-2 items-center">
+          <LiquidBattery
+            soc={batterySoc}
+            charging={batteryChargingActive}
+            rate={batteryChargeRate}
           />
-        </div>
+          
+          <div className="space-y-4">
+            {/* Target SOC slider */}
+            <div className="space-y-2">
+              <div className="flex justify-between font-bold text-slate-400">
+                <span>Charge Target limit</span>
+                <span className="font-extrabold text-brand-400">{batteryTargetSoc}%</span>
+              </div>
+              <input 
+                type="range"
+                min="60"
+                max="100"
+                value={batteryTargetSoc}
+                disabled={batteryChargingActive}
+                onChange={(e) => setBatteryTargetSoc(parseInt(e.target.value))}
+                className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-white/10 accent-brand-500 disabled:opacity-50"
+              />
+            </div>
 
-        {/* Charge actions */}
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
-            {batteryChargingActive ? (
-              <>
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                <span>⚡ Charging at +{batteryChargeRate.toFixed(1)} kW</span>
-              </>
-            ) : (
-              <>
-                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                <span>🔋 Standing by to shave evening peaks</span>
-              </>
-            )}
-          </span>
-          <button
-            onClick={() => handleBatteryChargeToggle(!batteryChargingActive)}
-            className={`rounded-lg px-3.5 py-1.5 font-bold transition-all text-xs active:scale-95 ${
-              batteryChargingActive 
-                ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/10' 
-                : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/10'
-            }`}
-          >
-            {batteryChargingActive ? 'Stop Charging' : 'Pre-Charge Now'}
-          </button>
+            {/* Charge actions */}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[9px] text-slate-450 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                {batteryChargingActive ? (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-emerald-450 animate-ping" />
+                    <span>⚡ Charge Active</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="h-2 w-2 rounded-full bg-slate-600" />
+                    <span>🔋 Peak Shaving Ready</span>
+                  </>
+                )}
+              </span>
+              <button
+                onClick={() => handleBatteryChargeToggle(!batteryChargingActive)}
+                className={`rounded-lg px-4 py-2 font-black transition-all text-xs active:scale-95 ${
+                  batteryChargingActive 
+                    ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/10' 
+                    : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/10'
+                }`}
+              >
+                {batteryChargingActive ? 'Stop Charge' : 'Pre-Charge Now'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -307,24 +418,24 @@ export const CostOptimizer: React.FC = () => {
     
     return (
       <div className="space-y-4 text-xs">
-        <span className="text-[11px] text-slate-400 block mb-1">
+        <span className="text-[11px] text-slate-450 block mb-1">
           Idle appliances consuming power on standby:
         </span>
         <div className="space-y-2">
           {entState && (
-            <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3 border border-slate-100 dark:border-slate-800/40">
+            <div className="flex items-center justify-between rounded-2xl bg-white/5 p-3.5 border border-white/5">
               <div className="flex flex-col gap-0.5">
-                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                  <Tv className="h-3.5 w-3.5 text-brand-500" /> Home Entertainment Setup
+                <span className="font-bold text-white flex items-center gap-2">
+                  <Tv className="h-4 w-4 text-brand-400" /> Home Entertainment Setup
                 </span>
                 <span className="text-[10px] text-slate-400">Standby Draw: {isEntOn ? `${entPower.toFixed(2)} kW` : '0.00 kW (Off)'}</span>
               </div>
               <button
                 onClick={() => handleApplianceToggle(entState.id, isEntOn)}
-                className={`rounded-lg px-2.5 py-1.5 font-bold transition-all text-[11px] active:scale-95 ${
+                className={`rounded-lg px-3 py-1.5 font-bold transition-all text-[11px] active:scale-95 ${
                   isEntOn 
-                    ? 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20' 
-                    : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                    ? 'bg-rose-500/15 text-rose-455 hover:bg-rose-500/25 border border-rose-500/20' 
+                    : 'bg-white/5 text-slate-350 hover:bg-white/10'
                 }`}
               >
                 {isEntOn ? 'Kill Standby' : 'Turn On'}
@@ -349,10 +460,10 @@ export const CostOptimizer: React.FC = () => {
               await handleApply(r.id, r.status);
               fetchOptimizer();
             }}
-            className={`rounded-lg px-3.5 py-1.5 font-bold transition-all text-xs active:scale-95 ${
+            className={`rounded-lg px-4 py-2 font-bold transition-all text-xs active:scale-95 ${
               r.status === 'applied'
-                ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-350 hover:bg-slate-300 dark:hover:bg-slate-700'
-                : 'bg-brand-600 text-white hover:bg-brand-500'
+                ? 'bg-white/10 text-slate-300 hover:bg-white/20'
+                : 'bg-brand-650 text-white hover:bg-brand-550 border border-brand-550/20'
             }`}
           >
             {r.status === 'applied' ? 'Applied Standby Save' : 'Optimize All Standby'}
@@ -362,68 +473,16 @@ export const CostOptimizer: React.FC = () => {
     );
   };
 
-  const renderThermostatControl = (r: Recommendation) => {
-    const acState = applianceStates["Air Conditioner"];
-    const isACOn = acState?.status ?? false;
-    const acPower = acState?.power ?? 0;
-    const [temp, setTemp] = useState(21.0);
-
-    return (
-      <div className="space-y-4 text-xs">
-        <div className="flex justify-between items-center">
-          <span>Air Conditioner Status:</span>
-          <span className={`font-bold flex items-center gap-1.5 ${isACOn ? 'text-blue-500' : 'text-slate-400 dark:text-slate-500'}`}>
-            <span className={`h-2 w-2 rounded-full ${isACOn ? 'bg-blue-500 animate-pulse' : 'bg-slate-450'}`} />
-            {isACOn ? `Active (${acPower.toFixed(2)} kW)` : 'Inactive / Off'}
-          </span>
-        </div>
-
-        {isACOn && (
-          <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/40 rounded-xl">
-            <div className="flex justify-between items-center">
-              <span className="text-[11px] text-slate-400">Current Temperature Setpoint:</span>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => setTemp(t => Math.max(16.0, t - 0.5))}
-                  className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-800 font-bold flex items-center justify-center hover:scale-105 active:scale-95 transition-all text-sm"
-                >
-                  -
-                </button>
-                <span className="font-extrabold text-slate-800 dark:text-white text-sm">{temp.toFixed(1)}°C</span>
-                <button 
-                  onClick={() => setTemp(t => Math.min(30.0, t + 0.5))}
-                  className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-800 font-bold flex items-center justify-center hover:scale-105 active:scale-95 transition-all text-sm"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={async () => {
-                  setTemp(23.5);
-                  await handleApply(r.id, r.status);
-                  fetchOptimizer();
-                }}
-                className={`rounded-lg px-3 py-1.5 font-bold transition-all text-xs active:scale-95 ${
-                  r.status === 'applied'
-                    ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-350 hover:bg-slate-300 dark:hover:bg-slate-700'
-                    : 'bg-brand-600 text-white hover:bg-brand-500 shadow-sm'
-                }`}
-              >
-                {r.status === 'applied' ? 'Eco Setpoint Active' : 'Optimize Setpoint (23.5°C)'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+      <div className="space-y-8">
+        <div className="grid gap-6 sm:grid-cols-3">
+          {[1, 2, 3].map((i) => <CardSkeleton key={i} />)}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2"><ListSkeleton /></div>
+          <div><ListSkeleton /></div>
+        </div>
       </div>
     );
   }
@@ -451,33 +510,33 @@ export const CostOptimizer: React.FC = () => {
 
       {/* Overview Summaries */}
       <div className="grid gap-6 sm:grid-cols-3">
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Tariff Optimization Savings</span>
+        <div className="glass-panel glow-emerald rounded-3xl p-6">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Tariff Optimizations</span>
           <div className="mt-4 flex items-center justify-between">
-            <span className="text-2xl font-bold tracking-tight text-slate-800 dark:text-white md:text-3xl">${savings.toFixed(2)}</span>
-            <div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-500 border border-emerald-500/20">
+            <span className="text-2xl font-black tracking-tight text-white md:text-3xl">${savings.toFixed(2)}</span>
+            <div className="rounded-2xl bg-emerald-500/10 p-2.5 text-emerald-450 border border-emerald-500/20">
               <DollarSign className="h-5 w-5" />
             </div>
           </div>
-          <span className="mt-2 block text-xs text-slate-400">Potential monthly billing savings</span>
+          <span className="mt-2 block text-xs text-slate-400">Potential monthly savings</span>
         </div>
 
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Optimization Actions</span>
+        <div className="glass-panel glow-brand rounded-3xl p-6">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Actions Configured</span>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-800 dark:text-white md:text-3xl">
+            <span className="text-2xl font-black tracking-tight text-white md:text-3xl">
               {recs.filter(r => r.status === 'applied').length} / {recs.length}
             </span>
-            <span className="text-xs text-slate-500 font-semibold uppercase">Applied</span>
+            <span className="text-xs text-slate-400 font-semibold uppercase">Applied</span>
           </div>
-          <span className="mt-2 block text-xs text-slate-400">Auto-scheduling and load shifts</span>
+          <span className="mt-2 block text-xs text-slate-400">Auto-schedules active</span>
         </div>
 
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Billing Cycle Progress</span>
+        <div className="glass-panel rounded-3xl p-6">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Billing Cycle</span>
           <div className="mt-4">
-            <span className="text-2xl font-bold tracking-tight text-slate-800 dark:text-white md:text-3xl">{progress}%</span>
-            <div className="mt-2 h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800">
+            <span className="text-2xl font-black tracking-tight text-white md:text-3xl">{progress}%</span>
+            <div className="mt-2.5 h-1.5 w-full rounded-full bg-white/10">
               <div className="h-full rounded-full bg-brand-500" style={{ width: `${progress}%` }} />
             </div>
           </div>
@@ -487,15 +546,15 @@ export const CostOptimizer: React.FC = () => {
       {/* Grid container */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Recommendations list */}
-        <div className="glass-panel rounded-2xl p-6 lg:col-span-2 space-y-6">
+        <div className="glass-panel rounded-3xl p-6 lg:col-span-2 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-extrabold text-slate-800 dark:text-white text-lg">Load-Shifting Recommendations</h2>
-              <p className="text-xs text-slate-400 mt-1">Interactive cards to optimize household loads dynamically</p>
+              <h2 className="font-extrabold text-white text-lg">Load-Shifting Analytics</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Interactive optimization recommendations</p>
             </div>
             <button 
               onClick={fetchOptimizer}
-              className="rounded-xl border border-slate-200/80 p-2.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800/80 dark:bg-darkbg-card dark:text-slate-400 dark:hover:bg-slate-800 transition-all duration-200 active:scale-95"
+              className="rounded-xl border border-white/5 p-2.5 text-slate-400 hover:bg-white/5 transition-all duration-200 active:scale-95"
             >
               <RefreshCw className="h-4 w-4" />
             </button>
@@ -511,14 +570,14 @@ export const CostOptimizer: React.FC = () => {
                     key={r.id} 
                     className={`rounded-2xl border p-5 transition-all duration-300 shadow-sm ${
                       isApplied 
-                        ? 'border-emerald-500/25 bg-emerald-500/5 dark:bg-emerald-950/10' 
-                        : 'border-slate-200/70 bg-white dark:border-slate-800/60 dark:bg-slate-900/10'
+                        ? 'border-emerald-500/20 bg-emerald-500/5' 
+                        : 'border-white/5 bg-white/5'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3">
                         <div className={`mt-0.5 rounded-xl p-2.5 ${
-                          isApplied ? 'bg-emerald-500/15 text-emerald-500' : 'bg-brand-500/10 text-brand-500'
+                          isApplied ? 'bg-emerald-500/15 text-emerald-400' : 'bg-brand-500/10 text-brand-400'
                         }`}>
                           {isApplied ? (
                             <CheckCircle2 className="h-5 w-5" />
@@ -527,22 +586,30 @@ export const CostOptimizer: React.FC = () => {
                           )}
                         </div>
                         <div>
-                          <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">{r.title}</h3>
-                          <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">{r.recommendation_text}</p>
+                          <h3 className="font-bold text-white text-sm">{r.title}</h3>
+                          <p className="mt-1.5 text-xs text-slate-450 leading-relaxed">{r.recommendation_text}</p>
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <span className="block text-sm font-bold text-slate-800 dark:text-white">+${r.potential_saving.toFixed(2)}</span>
-                        <span className="block text-[10px] text-slate-400 font-semibold uppercase mt-0.5">Est. saving</span>
+                        <span className="block text-sm font-bold text-white">+${r.potential_saving.toFixed(2)}</span>
+                        <span className="block text-[9px] text-slate-450 font-bold uppercase mt-0.5">Save / mo</span>
                       </div>
                     </div>
 
-                    {/* Interactive Body Controls */}
-                    <div className="mt-4 border-t border-slate-100 dark:border-slate-800/40 pt-4">
+                    {/* Interactive Controls */}
+                    <div className="mt-4 border-t border-white/5 pt-4">
                       {r.actionable_type === 'shift_load' && renderShiftLoadControl(r)}
                       {r.actionable_type === 'battery' && renderBatteryControl(r)}
                       {r.actionable_type === 'standby' && renderStandbyControl(r)}
-                      {r.actionable_type === 'thermostat' && renderThermostatControl(r)}
+                      {r.actionable_type === 'thermostat' && (
+                        <ThermostatControl
+                          r={r}
+                          acState={applianceStates["Air Conditioner"]}
+                          token={token}
+                          handleApply={handleApply}
+                          fetchOptimizer={fetchOptimizer}
+                        />
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -552,23 +619,23 @@ export const CostOptimizer: React.FC = () => {
         </div>
 
         {/* Time-of-use rates tariff card */}
-        <div className="glass-panel rounded-2xl p-6 flex flex-col justify-between">
+        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between">
           <div>
-            <h2 className="font-bold text-slate-800 dark:text-white text-lg">Time-of-Use (TOU) Rates</h2>
-            <p className="text-xs text-slate-400 mt-1">Current active grid electricity rate brackets</p>
+            <h3 className="font-extrabold text-white text-base">Time-of-Use (TOU) Rates</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Electricity grid rate brackets</p>
 
             <div className="mt-6 space-y-4">
               {tariffs.map((t, index) => (
-                <div key={index} className="flex items-center justify-between rounded-xl bg-slate-100 dark:bg-slate-900/40 p-4 border border-slate-200/50 dark:border-slate-850/50">
+                <div key={index} className="flex items-center justify-between rounded-2xl bg-white/5 p-4 border border-white/5">
                   <div className="flex items-center gap-3">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color }} />
+                    <span className="h-2.5 w-2.5 rounded-full animate-pulse" style={{ backgroundColor: t.color }} />
                     <div>
-                      <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">{t.type}</span>
-                      <span className="block text-[10px] text-slate-400 mt-0.5">{t.time}</span>
+                      <span className="block text-xs font-bold text-white">{t.type}</span>
+                      <span className="block text-[9px] text-slate-450 mt-0.5">{t.time}</span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="block text-sm font-bold text-slate-800 dark:text-white">${t.rate.toFixed(2)}</span>
+                    <span className="block text-sm font-black text-white">${t.rate.toFixed(2)}</span>
                     <span className="block text-[9px] text-slate-400">/ kWh</span>
                   </div>
                 </div>
@@ -576,49 +643,48 @@ export const CostOptimizer: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-6 rounded-xl bg-brand-500/5 border border-brand-500/15 p-4 text-xs text-brand-500 leading-relaxed font-medium">
-            ⏰ Grid Peak rates run during the evening dinner slot. We recommend scheduling heavy washers and dryers to start post-9:00 PM.
+          <div className="mt-6 rounded-2xl bg-brand-500/5 border border-brand-500/15 p-4 text-xs text-brand-400 leading-relaxed font-semibold">
+            ⏰ Peak rate tiers run in the evening. Run heavy appliance washers or heat pumps post-9:00 PM to save bill charges.
           </div>
         </div>
       </div>
 
       {/* Recommended Schedule Timeline Section */}
-      <div className="glass-panel rounded-2xl p-6">
+      <div className="glass-panel rounded-3xl p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-extrabold text-slate-800 dark:text-white text-lg">Recommended Appliance Schedule</h2>
-            <p className="text-xs text-slate-400 mt-1">Timing cards optimized dynamically via weather and load forecasters</p>
+            <h3 className="font-extrabold text-white text-base">Recommended Appliance Scheduling</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Optimized slot sequences created by ML forecasters</p>
           </div>
-          <div className="rounded-2xl bg-slate-100 p-2 dark:bg-slate-800 border border-slate-250/20">
-            <Clock className="h-4 w-4 text-slate-600 dark:text-slate-350" />
+          <div className="rounded-2xl bg-white/5 p-2 text-slate-400 border border-white/5">
+            <Clock className="h-4.5 w-4.5" />
           </div>
         </div>
 
         {/* Schedule grid items */}
         <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {schedule.map((item, index) => (
-            <div key={index} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 flex flex-col justify-between">
+            <div key={index} className="group rounded-2xl border border-white/5 bg-slate-950/40 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-brand-500/20 flex flex-col justify-between">
               <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-355 flex-shrink-0 border border-slate-200/50 dark:border-slate-800/50">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/5 border border-white/5 flex-shrink-0">
                   {(() => {
                     switch (item.icon) {
-                      case 'BatteryCharging': return <BatteryCharging className="h-5 w-5 text-emerald-500" />;
-                      case 'Car': return <Car className="h-5 w-5 text-brand-500" />;
-                      case 'Thermometer': return <Thermometer className="h-5 w-5 text-blue-500" />;
-                      case 'WashingMachine': return <Zap className="h-5 w-5 text-amber-500" />;
-                      default: return <Sliders className="h-5 w-5 text-indigo-500" />;
+                      case 'BatteryCharging': return <BatteryCharging className="h-5 w-5 text-emerald-400" />;
+                      case 'Car': return <Car className="h-5 w-5 text-brand-400" />;
+                      case 'Thermometer': return <Thermometer className="h-5 w-5 text-blue-400" />;
+                      default: return <Zap className="h-5 w-5 text-amber-400" />;
                     }
                   })()}
                 </span>
                 <div>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">{item.appliance}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{item.reason}</p>
+                  <p className="text-sm font-bold text-white">{item.appliance}</p>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{item.reason}</p>
                 </div>
               </div>
               
-              <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-900/60">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Suggested Slot</span>
-                <span className="rounded-full bg-brand-500/10 border border-brand-500/20 px-3 py-1 text-[10px] font-bold text-brand-500 tracking-wide">
+              <div className="mt-4 flex items-center justify-between pt-3 border-t border-white/5">
+                <span className="text-[9px] text-slate-450 font-bold uppercase tracking-wider">Suggested Slot</span>
+                <span className="rounded-full bg-brand-500/10 border border-brand-500/20 px-3 py-1 text-[10px] font-bold text-brand-400 tracking-wide">
                   {item.recommended_time}
                 </span>
               </div>
@@ -627,21 +693,21 @@ export const CostOptimizer: React.FC = () => {
         </div>
 
         {/* Visual Timeline Panel */}
-        <div className="mt-8 border-t border-slate-250/20 dark:border-slate-800/60 pt-6">
-          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2">
-            <Sliders className="h-4 w-4 text-brand-500" /> Optimized Daily Schedule Timeline
+        <div className="mt-8 border-t border-white/5 pt-6">
+          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <Sliders className="h-4.5 w-4.5 text-brand-400" /> Optimized Daily Schedule Timeline
           </h3>
           <div className="space-y-4">
             {/* Tariff regions indicator */}
-            <div className="relative h-6 rounded-lg bg-slate-100 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-800/40 flex overflow-hidden text-[9px] font-bold text-white select-none">
-              <div className="flex-1 bg-emerald-500/20 text-emerald-500 flex items-center justify-center" style={{ flexGrow: 6 }}>Off-Peak</div>
-              <div className="flex-1 bg-amber-500/20 text-amber-500 flex items-center justify-center" style={{ flexGrow: 10 }}>Mid-Peak</div>
-              <div className="flex-1 bg-rose-500/20 text-rose-500 flex items-center justify-center" style={{ flexGrow: 5 }}>On-Peak</div>
-              <div className="flex-1 bg-emerald-500/20 text-emerald-500 flex items-center justify-center" style={{ flexGrow: 3 }}>Off-Peak</div>
+            <div className="relative h-6 rounded-lg bg-slate-900/60 border border-white/5 flex overflow-hidden text-[9px] font-bold text-white select-none">
+              <div className="flex-grow bg-emerald-500/10 border-r border-white/5 text-emerald-450 flex items-center justify-center" style={{ flexBasis: '25%' }}>Off-Peak</div>
+              <div className="flex-grow bg-amber-500/10 border-r border-white/5 text-amber-450 flex items-center justify-center" style={{ flexBasis: '41%' }}>Mid-Peak</div>
+              <div className="flex-grow bg-rose-500/10 border-r border-white/5 text-rose-450 flex items-center justify-center" style={{ flexBasis: '21%' }}>On-Peak</div>
+              <div className="flex-grow bg-emerald-500/10 text-emerald-455 flex items-center justify-center" style={{ flexBasis: '13%' }}>Off-Peak</div>
             </div>
             
             {/* Hourly ticks */}
-            <div className="flex justify-between text-[9px] text-slate-450 dark:text-slate-500 px-1 font-mono">
+            <div className="flex justify-between text-[9px] text-slate-500 px-1 font-mono">
               <span>12 AM</span>
               <span>4 AM</span>
               <span>8 AM</span>
@@ -652,9 +718,8 @@ export const CostOptimizer: React.FC = () => {
             </div>
 
             {/* Items horizontal progress bars */}
-            <div className="space-y-3.5 pt-2">
+            <div className="space-y-3 pt-2">
               {schedule.map((item, index) => {
-                // Determine width and offset positions based on recommended_time string parsing
                 let startHour = 0;
                 let endHour = 24;
                 const timeStr = item.recommended_time.toLowerCase();
@@ -676,14 +741,12 @@ export const CostOptimizer: React.FC = () => {
 
                 return (
                   <div key={index} className="flex items-center gap-4">
-                    {/* Name of appliance */}
-                    <div className="w-28 text-[11px] font-bold text-slate-600 dark:text-slate-400 truncate">
+                    <div className="w-28 text-[11px] font-bold text-slate-400 truncate">
                       {item.appliance}
                     </div>
-                    {/* Bar row */}
-                    <div className="flex-1 relative h-6 rounded-lg bg-slate-100/50 dark:bg-slate-900/20 border border-slate-200/50 dark:border-slate-800/40">
+                    <div className="flex-1 relative h-6 rounded-lg bg-white/5 border border-white/5">
                       <div 
-                        className="absolute h-full top-0 rounded-lg bg-gradient-to-r from-brand-500 to-indigo-500 border border-brand-500/20 shadow flex items-center justify-center text-[8px] font-extrabold text-white text-center cursor-pointer select-none transition-all hover:scale-[1.01] hover:brightness-110"
+                        className="absolute h-full top-0 rounded-lg bg-gradient-to-r from-brand-600 to-indigo-650 border border-brand-500/20 shadow flex items-center justify-center text-[8px] font-extrabold text-white text-center cursor-pointer select-none transition-all hover:scale-[1.01] hover:brightness-110"
                         style={{ left: `${startPct}%`, width: `${durationPct}%` }}
                         title={`${item.appliance}: ${item.recommended_time}`}
                       >

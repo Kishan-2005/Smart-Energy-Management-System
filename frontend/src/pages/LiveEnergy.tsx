@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Zap, Activity, ShieldAlert, Cpu } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Zap, Activity, ShieldAlert, Cpu, Sparkles, Sliders, PlayCircle, StopCircle } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { CardSkeleton, ChartSkeleton } from '../components/LoadingSkeleton';
 
 interface LiveMetric {
   timestamp: string;
@@ -17,7 +18,7 @@ export const LiveEnergy: React.FC = () => {
   const { token } = useAuth();
   const [currentMetric, setCurrentMetric] = useState<LiveMetric | null>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let ws: WebSocket;
@@ -25,6 +26,10 @@ export const LiveEnergy: React.FC = () => {
 
     const connectWS = () => {
       ws = new WebSocket('ws://127.0.0.1:8000/api/v1/energy/ws');
+
+      ws.onopen = () => {
+        setLoading(false);
+      };
 
       ws.onmessage = (event) => {
         try {
@@ -42,9 +47,10 @@ export const LiveEnergy: React.FC = () => {
               time: timeLabel, 
               power: data.active_power, 
               voltage: data.voltage, 
-              current: data.current 
+              current: data.current,
+              freq: data.frequency
             }];
-            if (next.length > 15) {
+            if (next.length > 25) {
               return next.slice(1);
             }
             return next;
@@ -71,120 +77,179 @@ export const LiveEnergy: React.FC = () => {
     };
   }, [token]);
 
+  if (loading && history.length === 0) {
+    return (
+      <div className="space-y-8">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => <CardSkeleton key={i} />)}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2"><ChartSkeleton /></div>
+          <div><ChartSkeleton /></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      {/* Real-time Indicator Gauge Cards */}
+      {/* Indicator cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Power */}
-        <div className="glass-panel glow-blue rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Active Load</span>
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">{currentMetric?.active_power ?? '0.000'} kW</span>
-            <div className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
+        {/* Card 1: Active Power */}
+        <div className="glass-panel glow-rose rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Draw</span>
+            <div className="h-6 w-6 rounded-full bg-rose-500/10 border border-rose-500/25 flex items-center justify-center">
+              <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-ping" />
+            </div>
           </div>
-          <span className="mt-2 block text-[10px] text-slate-500 dark:text-slate-400">Updates live every 2 seconds</span>
+          <div className="mt-6">
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
+              {currentMetric?.active_power.toFixed(3) ?? '0.000'} kW
+            </span>
+            <span className="mt-2 block text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              Updates live every 1.0s
+            </span>
+          </div>
         </div>
 
         {/* Card 2: Voltage */}
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Line Voltage</span>
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">{currentMetric?.voltage ?? '230.0'} V</span>
-            <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-500">Nominal</span>
+        <div className="glass-panel glow-emerald rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Line Voltage</span>
+            <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[9px] font-bold text-emerald-450 border border-emerald-500/20">
+              NOMINAL
+            </span>
           </div>
-          <span className="mt-2 block text-[10px] text-slate-500 dark:text-slate-400">Target Range: 220V - 240V</span>
+          <div className="mt-6">
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
+              {currentMetric?.voltage.toFixed(1) ?? '230.0'} V
+            </span>
+            <span className="mt-2 block text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              Deviation: {Math.abs((currentMetric?.voltage ?? 230) - 230).toFixed(2)}V
+            </span>
+          </div>
         </div>
 
         {/* Card 3: Current */}
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Current Flow</span>
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">{currentMetric?.current ?? '0.00'} A</span>
-            <span className="text-xs text-slate-400 dark:text-slate-500">RMS Reading</span>
+        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Amperage</span>
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">RMS Current</span>
           </div>
-          <span className="mt-2 block text-[10px] text-slate-500 dark:text-slate-400">Amperage rating maximum: 32A</span>
+          <div className="mt-6">
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
+              {currentMetric?.current.toFixed(2) ?? '0.00'} A
+            </span>
+            <span className="mt-2 block text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              Max load capacity: 32A
+            </span>
+          </div>
         </div>
 
         {/* Card 4: Frequency */}
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">AC Frequency</span>
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">{currentMetric?.frequency ?? '50.00'} Hz</span>
-            <span className="text-xs text-brand-500 font-semibold">Phase Locked</span>
+        <div className="glass-panel glow-brand rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">AC Frequency</span>
+            <div className="rounded-xl bg-brand-500/10 p-1.5 text-brand-450 border border-brand-500/20">
+              <Cpu className="h-4 w-4" />
+            </div>
           </div>
-          <span className="mt-2 block text-[10px] text-slate-500 dark:text-slate-400">Stability Threshold: ±0.5 Hz</span>
+          <div className="mt-6">
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
+              {currentMetric?.frequency.toFixed(2) ?? '50.00'} Hz
+            </span>
+            <span className="mt-2 block text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+              Synchronized Phase-Lock
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Live Graph Section */}
+      {/* Graphs and Logs */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Line Plot */}
-        <div className="glass-panel rounded-2xl p-6 lg:col-span-2">
-          <div className="mb-6 flex items-center justify-between">
+        {/* Real-time Oscilloscope */}
+        <div className="glass-panel rounded-3xl p-6 lg:col-span-2 flex flex-col justify-between h-[360px]">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="font-bold text-slate-800 dark:text-white text-lg flex items-center gap-2">
-                <Activity className="h-5 w-5 text-red-500 animate-pulse-slow" /> Real-time Oscilloscope Curve
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">Telemetry stream demonstrating high frequency usage oscillations</p>
+              <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+                <Sliders className="h-4.5 w-4.5 text-brand-400" /> Active Load Oscilloscope
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">High frequency line power draw chart</p>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-bold text-rose-450 bg-rose-500/10 border border-rose-500/20 px-3 py-1 rounded-full">
+              <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping" />
+              <span>LIVE CORE STREAM</span>
             </div>
           </div>
 
-          <div className="h-80 w-full">
-            {history.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-slate-400">
-                <div className="flex flex-col items-center gap-2">
-                  <Activity className="h-8 w-8 animate-spin" />
-                  <span>Waiting for data stream...</span>
-                </div>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={history}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(156, 163, 175, 0.1)" />
-                  <XAxis dataKey="time" stroke="rgba(156, 163, 175, 0.6)" fontSize={10} tickLine={false} />
-                  <YAxis stroke="rgba(156, 163, 175, 0.6)" fontSize={10} tickLine={false} domain={['auto', 'auto']} />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'rgba(22, 31, 48, 0.95)',
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
-                      borderRadius: '12px',
-                      color: '#fff',
-                      fontSize: '11px'
-                    }}
-                  />
-                  <Line type="monotone" dataKey="power" stroke="#ef4444" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
+          <div className="h-[240px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={history}>
+                <defs>
+                  <linearGradient id="livePowerGradDraw" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255, 255, 255, 0.03)" />
+                <XAxis dataKey="time" stroke="rgba(255, 255, 255, 0.3)" fontSize={10} tickLine={false} />
+                <YAxis stroke="rgba(255, 255, 255, 0.3)" fontSize={10} tickLine={false} unit=" kW" domain={['auto', 'auto']} />
+                <Tooltip 
+                  contentStyle={{ 
+                    background: 'rgba(13, 18, 30, 0.95)', 
+                    border: '1px solid rgba(255, 255, 255, 0.08)', 
+                    borderRadius: '16px',
+                    color: '#fff',
+                    fontSize: '11px'
+                  }} 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="power" 
+                  stroke="#f43f5e" 
+                  strokeWidth={2.5} 
+                  fillOpacity={1} 
+                  fill="url(#livePowerGradDraw)" 
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Real-time Logger & Warnings */}
-        <div className="glass-panel rounded-2xl p-6 flex flex-col justify-between">
+        {/* Real-time Status Logger */}
+        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between h-[360px]">
           <div>
-            <h2 className="font-bold text-slate-800 dark:text-white text-lg">System Status Log</h2>
-            <p className="text-xs text-slate-400 mt-1">Automated safety threshold checks</p>
+            <h3 className="font-extrabold text-white text-base">Grid System Status Log</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Automated safety threshold checks</p>
           </div>
 
-          <div className="my-6 space-y-3 overflow-y-auto max-h-56 pr-2">
-            {history.map((h, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl bg-slate-100 dark:bg-slate-900/40 p-3 text-xs">
-                <span className="text-slate-500 font-semibold">{h.time}</span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">{h.power} kW</span>
-                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                  h.power > 4.0 
-                    ? 'bg-amber-500/10 text-amber-500' 
-                    : 'bg-emerald-500/10 text-emerald-500'
-                }`}>
-                  {h.power > 4.0 ? 'High load' : 'Normal'}
-                </span>
+          <div className="my-5 flex-1 space-y-2.5 overflow-y-auto pr-1 scrollbar-thin max-h-[170px]">
+            {history.length === 0 ? (
+              <div className="text-center text-xs text-slate-500 py-8">
+                No active records.
               </div>
-            ))}
+            ) : (
+              history.map((h, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl bg-white/5 border border-white/5 p-3 text-xs transition-all hover:bg-white/10">
+                  <span className="text-slate-400 font-bold">{h.time}</span>
+                  <span className="font-extrabold text-white">{h.power.toFixed(3)} kW</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                    h.power > 3.0 
+                      ? 'bg-rose-500/10 text-rose-450 border border-rose-500/25' 
+                      : 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/25'
+                  }`}>
+                    {h.power > 3.0 ? 'High load' : 'Normal'}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
 
-          <div className="flex items-center gap-3 rounded-xl bg-blue-500/10 border border-blue-500/15 p-4 text-xs text-blue-500">
-            <Cpu className="h-5 w-5 flex-shrink-0" />
-            <span>Harmonics distortion filter is currently active. Line phase offset is balanced.</span>
+          <div className="flex items-center gap-3 rounded-2xl bg-white/5 border border-white/5 p-4 text-xs text-slate-350">
+            <Sparkles className="h-5 w-5 text-brand-400 flex-shrink-0" />
+            <span>Telemetry data filter: ON. Phase lock frequency is balanced across load lines.</span>
           </div>
         </div>
       </div>

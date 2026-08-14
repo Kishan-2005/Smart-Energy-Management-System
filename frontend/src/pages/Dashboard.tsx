@@ -11,10 +11,13 @@ import {
   Cpu, 
   Lightbulb, 
   Tv, 
-  Layers,
   Sparkles,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Home,
+  ShieldCheck,
+  DollarSign,
+  ArrowRight
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -27,6 +30,8 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CardSkeleton, ChartSkeleton, ListSkeleton } from '../components/LoadingSkeleton';
 
 interface Stats {
   current_load_kw: number;
@@ -50,6 +55,189 @@ interface Appliance {
   location: string;
 }
 
+// --------------------------------------------------------
+// SUB-COMPONENT: INTERACTIVE ENERGY FLOW (Tesla Energy Style)
+// --------------------------------------------------------
+interface EnergyFlowProps {
+  solar: number;
+  home: number;
+  batterySoc: number;
+  batteryRate: number; // positive = charging, negative = discharging
+  batteryCharging: boolean;
+  gridImport: number; // positive = import, negative = export
+}
+
+const EnergyFlow: React.FC<EnergyFlowProps> = ({
+  solar,
+  home,
+  batterySoc,
+  batteryRate,
+  batteryCharging,
+  gridImport
+}) => {
+  const isSolarGenerating = solar > 0.05;
+  const isBatteryCharging = batteryCharging && batteryRate > 0.05;
+  const isBatteryDischarging = !batteryCharging && batterySoc > 15 && Math.abs(batteryRate) > 0.01;
+  const isGridImporting = gridImport > 0.05;
+  const isGridExporting = gridImport < -0.05;
+
+  return (
+    <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between h-[360px] relative overflow-hidden">
+      <div>
+        <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+          <Activity className="h-4.5 w-4.5 text-emerald-400 animate-pulse" /> Live Energy Flow
+        </h3>
+        <p className="text-xs text-slate-400 mt-0.5">Real-time power routing across system components</p>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center relative mt-2 select-none">
+        {/* SVG Flow lines background */}
+        <svg viewBox="0 0 400 240" className="w-full h-full max-w-[450px]">
+          <defs>
+            <linearGradient id="solarGlow" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fbbf24" stopOpacity={0.8} />
+              <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.2} />
+            </linearGradient>
+            <linearGradient id="homeGlow" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+              <stop offset="100%" stopColor="#059669" stopOpacity={0.2} />
+            </linearGradient>
+            <linearGradient id="batteryGlow" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
+              <stop offset="100%" stopColor="#2563eb" stopOpacity={0.2} />
+            </linearGradient>
+            <linearGradient id="gridGlow" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.8} />
+              <stop offset="100%" stopColor="#0891b2" stopOpacity={0.2} />
+            </linearGradient>
+          </defs>
+
+          {/* PATHS */}
+          {/* Solar -> Home */}
+          <path d="M 200 65 L 200 135" stroke="rgba(255, 255, 255, 0.06)" strokeWidth="3" fill="none" />
+          {isSolarGenerating && (
+            <path
+              d="M 200 65 L 200 135"
+              stroke="#fbbf24"
+              strokeWidth="2"
+              fill="none"
+              className="flow-path-active"
+            />
+          )}
+
+          {/* Solar -> Battery */}
+          <path d="M 200 65 L 305 135" stroke="rgba(255, 255, 255, 0.06)" strokeWidth="3" fill="none" />
+          {isSolarGenerating && isBatteryCharging && (
+            <path
+              d="M 200 65 L 305 135"
+              stroke="#fbbf24"
+              strokeWidth="2"
+              fill="none"
+              className="flow-path-active"
+            />
+          )}
+
+          {/* Grid -> Home / Home -> Grid */}
+          <path d="M 95 135 L 200 135" stroke="rgba(255, 255, 255, 0.06)" strokeWidth="3" fill="none" />
+          {isGridImporting && (
+            <path
+              d="M 95 135 L 200 135"
+              stroke="#06b6d4"
+              strokeWidth="2"
+              fill="none"
+              className="flow-path-active"
+            />
+          )}
+          {isGridExporting && (
+            <path
+              d="M 95 135 L 200 135"
+              stroke="#10b981"
+              strokeWidth="2"
+              fill="none"
+              className="flow-path-reverse"
+            />
+          )}
+
+          {/* Battery -> Home / Home -> Battery */}
+          <path d="M 305 135 L 200 135" stroke="rgba(255, 255, 255, 0.06)" strokeWidth="3" fill="none" />
+          {isBatteryDischarging && (
+            <path
+              d="M 305 135 L 200 135"
+              stroke="#3b82f6"
+              strokeWidth="2"
+              fill="none"
+              className="flow-path-active"
+            />
+          )}
+          {isBatteryCharging && !isSolarGenerating && (
+            <path
+              d="M 305 135 L 200 135"
+              stroke="#3b82f6"
+              strokeWidth="2"
+              fill="none"
+              className="flow-path-reverse"
+            />
+          )}
+
+          {/* NODES */}
+          {/* Node 1: SOLAR (Top) */}
+          <g transform="translate(200, 45)">
+            <circle r="22" fill="url(#solarGlow)" stroke={isSolarGenerating ? '#fbbf24' : 'rgba(255, 255, 255, 0.1)'} strokeWidth="2" className={isSolarGenerating ? 'node-pulse-emerald' : ''} />
+            <Sun className={`h-5 w-5 -translate-x-2.5 -translate-y-2.5 ${isSolarGenerating ? 'text-amber-300 animate-spin-slow' : 'text-slate-500'}`} />
+          </g>
+
+          {/* Node 2: GRID (Left) */}
+          <g transform="translate(70, 135)">
+            <circle r="22" fill="url(#gridGlow)" stroke={isGridImporting || isGridExporting ? '#06b6d4' : 'rgba(255, 255, 255, 0.1)'} strokeWidth="2" />
+            <Zap className={`h-5 w-5 -translate-x-2.5 -translate-y-2.5 ${isGridImporting ? 'text-cyan-400' : isGridExporting ? 'text-emerald-400' : 'text-slate-500'}`} />
+          </g>
+
+          {/* Node 3: HOME / LOAD (Center) */}
+          <g transform="translate(200, 135)">
+            <circle r="26" fill="url(#homeGlow)" stroke="#10b981" strokeWidth="2.5" />
+            <Home className="h-6 w-6 -translate-x-3 -translate-y-3 text-emerald-300" />
+          </g>
+
+          {/* Node 4: BATTERY (Right) */}
+          <g transform="translate(330, 135)">
+            <circle r="22" fill="url(#batteryGlow)" stroke={isBatteryCharging || isBatteryDischarging ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)'} strokeWidth="2" className={isBatteryCharging ? 'node-pulse-brand' : ''} />
+            <Battery className={`h-5 w-5 -translate-x-2.5 -translate-y-2.5 ${isBatteryCharging ? 'text-blue-400' : isBatteryDischarging ? 'text-indigo-400' : 'text-slate-500'}`} />
+          </g>
+        </svg>
+
+        {/* Float Labels with Values */}
+        <div className="absolute top-[5px] text-center">
+          <span className="block text-[10px] font-bold text-amber-400 uppercase tracking-wide">Solar Generation</span>
+          <span className="text-xs font-black text-white">{solar.toFixed(2)} kW</span>
+        </div>
+
+        <div className="absolute left-[15px] top-[148px] text-center">
+          <span className="block text-[10px] font-bold text-cyan-400 uppercase tracking-wide">Utility Grid</span>
+          <span className="text-xs font-black text-white">
+            {gridImport > 0 ? `Import ${gridImport.toFixed(2)} kW` : gridImport < 0 ? `Export ${Math.abs(gridImport).toFixed(2)} kW` : 'Balanced'}
+          </span>
+        </div>
+
+        <div className="absolute top-[170px] text-center">
+          <span className="block text-[10px] font-bold text-emerald-400 uppercase tracking-wide">Home Load</span>
+          <span className="text-sm font-black text-white">{home.toFixed(2)} kW</span>
+        </div>
+
+        <div className="absolute right-[15px] top-[148px] text-center">
+          <span className="block text-[10px] font-bold text-blue-400 uppercase tracking-wide">Battery</span>
+          <span className="text-xs font-black text-white">{batterySoc.toFixed(1)}%</span>
+          <span className="block text-[9px] font-semibold text-slate-400">
+            {batteryRate > 0.05 ? `+${batteryRate.toFixed(1)} kW` : batteryRate < -0.05 ? `${batteryRate.toFixed(1)} kW` : 'Idle'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --------------------------------------------------------
+// MAIN DASHBOARD COMPONENT
+// --------------------------------------------------------
 export const Dashboard: React.FC = () => {
   const { token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
@@ -193,18 +381,19 @@ export const Dashboard: React.FC = () => {
 
   if (loading && !stats) {
     return (
-      <div className="space-y-6">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800" />
-          ))}
+      <div className="space-y-8">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => <CardSkeleton key={i} />)}
         </div>
-        <div className="h-96 animate-pulse rounded-2xl bg-slate-200 dark:bg-slate-800" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2"><ChartSkeleton /></div>
+          <div><ListSkeleton /></div>
+        </div>
       </div>
     );
   }
 
-  // Fallbacks
+  // Live and Fallback Metrics calculation
   const currentLoad = liveData?.active_power ?? stats?.current_load_kw ?? 1.45;
   const currentVoltage = liveData?.voltage ?? 230.1;
   const currentAmps = liveData?.current ?? 6.3;
@@ -212,30 +401,46 @@ export const Dashboard: React.FC = () => {
   const todayConsumption = stats?.today_consumption_kwh ?? 14.5;
   const todaySolar = stats?.today_solar_generation_kwh ?? 11.2;
 
-  // Power Heatmap Grid mock dataset: 7 days of the week, 24 hours per day
+  // Compute live solar generation matching the backend simulator profile
+  const nowHour = new Date().getHours();
+  let computedSolar = 0.0;
+  if (nowHour >= 6 && nowHour <= 18) {
+    const bell = Math.exp(-0.5 * ((nowHour - 12) / 2.5) ** 2);
+    computedSolar = bell * 4.2;
+  }
+  const currentSolar = stats?.current_solar_production_kw ?? computedSolar;
+
+  // Retrieve battery parameters
+  const batterySoc = liveData?.battery_soc ?? stats?.battery_soc_percent ?? 68.0;
+  const batteryRate = liveData?.battery_charge_rate_kw ?? stats?.battery_charging_rate_kw ?? 0.0;
+  const batteryCharging = liveData?.battery_charging_active ?? (batteryRate > 0.05);
+
+  // Compute grid interaction
+  // Home consumes power, Solar produces power, Battery charging adds load, Discharging subtracts load
+  // Net Grid = HomeLoad - Solar - BatteryDischarge
+  const computedGrid = currentLoad - currentSolar;
+
+  // Power Heatmap Grid mock dataset
   const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   
-  // Power factor function representing normal grid load levels (peaks in evening 18-22 and morning 8-10)
   const getHeatmapColor = (dayIndex: number, hour: number) => {
     let baseLoad = 0.3; // Standby
     if (hour >= 8 && hour <= 10) baseLoad += 0.5; // morning spike
     if (hour >= 18 && hour <= 22) baseLoad += 0.9; // evening spike
-    
-    // Add minor day specific variance
     if (dayIndex >= 5) baseLoad += 0.2; // weekend boost
     
-    if (baseLoad > 1.2) return 'bg-rose-500/80 dark:bg-rose-500/90 hover:scale-125'; // high
-    if (baseLoad > 0.6) return 'bg-amber-400/70 dark:bg-amber-400/80 hover:scale-125'; // medium
-    return 'bg-emerald-500/30 dark:bg-emerald-500/20 hover:scale-125'; // low
+    if (baseLoad > 1.2) return 'bg-rose-500/80 hover:scale-125 shadow-sm shadow-rose-500/20'; // high
+    if (baseLoad > 0.6) return 'bg-amber-500/70 hover:scale-125 shadow-sm shadow-amber-500/10'; // medium
+    return 'bg-emerald-500/20 hover:scale-125'; // low
   };
 
   const getApplianceIcon = (category?: string | null) => {
     switch ((category || '').toLowerCase()) {
-      case 'lighting': return <Lightbulb className="h-4 w-4" />;
-      case 'entertainment': return <Tv className="h-4 w-4" />;
+      case 'lighting': return <Lightbulb className="h-4.5 w-4.5" />;
+      case 'entertainment': return <Tv className="h-4.5 w-4.5" />;
       case 'cooling':
-      case 'heating': return <Cpu className="h-4 w-4" />;
-      default: return <Zap className="h-4 w-4" />;
+      case 'heating': return <Cpu className="h-4.5 w-4.5" />;
+      default: return <Zap className="h-4.5 w-4.5" />;
     }
   };
 
@@ -265,41 +470,41 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Real-time WebSockets Banner status */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-3xl border border-slate-200/60 bg-white/40 p-4 backdrop-blur-md dark:border-slate-800/60 dark:bg-darkbg-card/40">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-3xl border border-white/5 bg-slate-950/40 p-4 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-2 rounded-2xl px-3.5 py-2 text-xs font-bold tracking-wide transition-all ${
+          <div className={`flex items-center gap-2 rounded-2xl px-3.5 py-2 text-xs font-extrabold tracking-wider transition-all ${
             wsStatus === 'LIVE' 
-              ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/25 shadow-[0_0_15px_rgba(16,185,129,0.15)]' 
+              ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/25 shadow-[0_0_15px_rgba(16,185,129,0.15)]' 
               : wsStatus === 'CONNECTING'
-                ? 'bg-amber-500/10 text-amber-500 border border-amber-500/25'
-                : 'bg-red-500/10 text-red-500 border border-red-500/25 animate-pulse'
+                ? 'bg-amber-500/10 text-amber-450 border border-amber-500/25'
+                : 'bg-rose-500/10 text-rose-450 border border-rose-500/25 animate-pulse'
           }`}>
             {wsStatus === 'LIVE' ? (
               <>
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                <Wifi className="h-4 w-4" />
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                <Wifi className="h-4 w-4 text-emerald-400" />
                 <span>LIVE TELEMETRY ACTIVE</span>
               </>
             ) : wsStatus === 'CONNECTING' ? (
               <>
-                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="h-2 w-2 rounded-full bg-amber-450 animate-pulse" />
                 <span>ESTABLISHING SOCKET...</span>
               </>
             ) : (
               <>
-                <WifiOff className="h-4 w-4" />
+                <WifiOff className="h-4 w-4 text-rose-450" />
                 <span>OFFLINE - SOCKET RETRY</span>
               </>
             )}
           </div>
           <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 font-semibold">
-            <Sparkles className="h-3.5 w-3.5 text-brand-500" />
+            <Sparkles className="h-3.5 w-3.5 text-brand-400" />
             <span>High-precision smart telemetry updating instantly</span>
           </div>
         </div>
         
         {liveData && (
-          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+          <span className="text-[11px] text-slate-450 font-mono tracking-wider">
             UPDATED: {new Date(liveData.timestamp).toLocaleTimeString()}
           </span>
         )}
@@ -308,108 +513,110 @@ export const Dashboard: React.FC = () => {
       {/* Energy KPI Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Power Load */}
-        <div className="glass-panel glow-blue rounded-3xl p-6 flex flex-col justify-between transition-all duration-200 hover:-translate-y-1">
+        <div className="glass-panel glow-brand rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Grid Active Power</span>
-            <div className="rounded-2xl bg-blue-500/10 p-2.5 text-blue-500 border border-blue-500/20">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">House Load</span>
+            <div className="rounded-2xl bg-brand-500/15 p-2.5 text-brand-400 border border-brand-500/20">
               <Zap className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-6">
-            <span className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white md:text-4xl">
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
               {currentLoad.toFixed(3)} kW
             </span>
-            <span className="mt-2 block text-xs font-medium text-slate-400 flex items-center gap-1">
-              <Activity className="h-3 w-3 text-emerald-500 animate-pulse" /> Real-time simulated load
+            <span className="mt-2 block text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-brand-400 animate-pulse" /> Real-time active usage
             </span>
           </div>
         </div>
 
-        {/* Card 2: Voltage Trend + Sparkline */}
-        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between transition-all duration-200 hover:-translate-y-1">
+        {/* Card 2: Solar Yield */}
+        <div className="glass-panel glow-emerald rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Voltage Line</span>
-            <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-500 border border-emerald-500/20">
-              STABLE
-            </span>
-          </div>
-          <div className="mt-4 flex items-baseline justify-between gap-4">
-            <div>
-              <span className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white md:text-4xl">
-                {currentVoltage.toFixed(1)} V
-              </span>
-              <span className="mt-2 block text-xs text-slate-400">Target Line: 230V</span>
-            </div>
-            
-            {/* Sparkline */}
-            <div className="h-10 w-24">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={rollingHistory}>
-                  <Line type="monotone" dataKey="voltage" stroke="#10b981" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Current Flow + Sparkline */}
-        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between transition-all duration-200 hover:-translate-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Line Current</span>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">RMS Telemetry</span>
-          </div>
-          <div className="mt-4 flex items-baseline justify-between gap-4">
-            <div>
-              <span className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white md:text-4xl">
-                {currentAmps.toFixed(2)} A
-              </span>
-              <span className="mt-2 block text-xs text-slate-400">Max limit: 32.0A</span>
-            </div>
-
-            {/* Sparkline */}
-            <div className="h-10 w-24">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={rollingHistory}>
-                  <Line type="monotone" dataKey="current" stroke="#ef4444" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Cumulative Energy */}
-        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between transition-all duration-200 hover:-translate-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Accumulated Counter</span>
-            <div className="rounded-2xl bg-orange-500/10 p-2.5 text-orange-500 border border-orange-500/20">
-              <TrendingUp className="h-5 w-5" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Solar Generation</span>
+            <div className="rounded-2xl bg-emerald-500/15 p-2.5 text-emerald-400 border border-emerald-500/20">
+              <Sun className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-6">
-            <span className="text-3xl font-extrabold tracking-tight text-slate-800 dark:text-white md:text-4xl">
-              {cumulativeEnergy.toFixed(3)} kWh
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
+              {currentSolar.toFixed(2)} kW
             </span>
-            <span className="mt-2 block text-xs text-slate-400">Wh counter logging enabled</span>
+            <span className="mt-2 block text-xs font-semibold text-slate-400">
+              Today: {todaySolar.toFixed(1)} kWh yielded
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Battery Level */}
+        <div className="glass-panel glow-amber rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Powerwall Battery</span>
+            <div className="rounded-2xl bg-amber-500/15 p-2.5 text-amber-400 border border-amber-500/20">
+              <Battery className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-6">
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
+              {batterySoc.toFixed(1)}%
+            </span>
+            <span className="mt-2 block text-xs font-semibold text-slate-400 flex items-center gap-1">
+              {batteryRate > 0.05 ? (
+                <span className="text-emerald-400 animate-pulse">⚡ Charging (+{batteryRate.toFixed(1)} kW)</span>
+              ) : batteryRate < -0.05 ? (
+                <span className="text-blue-400">🔋 Discharging ({batteryRate.toFixed(1)} kW)</span>
+              ) : (
+                <span>Idle / Connected</span>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Grid Import */}
+        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between hover:scale-[1.02] cursor-pointer">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Grid Import/Export</span>
+            <div className="rounded-2xl bg-cyan-500/15 p-2.5 text-cyan-400 border border-cyan-500/20">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-6">
+            <span className="text-3xl font-black tracking-tight text-white md:text-4xl">
+              {Math.abs(computedGrid).toFixed(2)} kW
+            </span>
+            <span className="mt-2 block text-xs font-semibold text-slate-400">
+              {computedGrid > 0 ? 'Drawing from grid utility' : computedGrid < 0 ? 'Exporting excess solar' : 'Balanced off-grid'}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Live Chart & Appliance Toggles Row */}
+      {/* Energy Flow & Real-time Graph row */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Live Line Chart */}
-        <div className="glass-panel rounded-3xl p-6 lg:col-span-2 flex flex-col justify-between">
+        {/* Interactive Energy Flow SVG */}
+        <EnergyFlow
+          solar={currentSolar}
+          home={currentLoad}
+          batterySoc={batterySoc}
+          batteryRate={batteryRate}
+          batteryCharging={batteryCharging}
+          gridImport={computedGrid}
+        />
+
+        {/* Real-time Oscilloscope Curve */}
+        <div className="glass-panel rounded-3xl p-6 lg:col-span-2 flex flex-col justify-between h-[360px]">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="font-extrabold text-slate-800 dark:text-white text-lg">Real-Time Power Curve</h2>
-              <p className="text-xs text-slate-400 mt-0.5">High frequency consumption logging graph</p>
+              <h3 className="font-extrabold text-white text-base">Real-Time Oscilloscope Curve</h3>
+              <p className="text-xs text-slate-400 mt-0.5">High-frequency home consumption logging</p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-blue-500 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-full">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-              <span>Real-time Active Load</span>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-brand-400 bg-brand-500/10 border border-brand-500/25 px-2.5 py-1 rounded-full">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400 animate-pulse" />
+              <span>Telemetry Active</span>
             </div>
           </div>
 
-          <div className="h-80 w-full">
+          <div className="h-[240px] w-full">
             {rollingHistory.length === 0 ? (
               <div className="flex h-full items-center justify-center text-slate-400">
                 <div className="flex flex-col items-center gap-2">
@@ -422,16 +629,16 @@ export const Dashboard: React.FC = () => {
                 <AreaChart data={rollingHistory}>
                   <defs>
                     <linearGradient id="livePowerGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#0ea0ea" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#0ea0ea" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(156, 163, 175, 0.1)" />
-                  <XAxis dataKey="time" stroke="rgba(156, 163, 175, 0.5)" fontSize={10} tickLine={false} />
-                  <YAxis stroke="rgba(156, 163, 175, 0.5)" fontSize={10} tickLine={false} unit=" kW" domain={['auto', 'auto']} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255, 255, 255, 0.03)" />
+                  <XAxis dataKey="time" stroke="rgba(255, 255, 255, 0.3)" fontSize={10} tickLine={false} />
+                  <YAxis stroke="rgba(255, 255, 255, 0.3)" fontSize={10} tickLine={false} unit=" kW" domain={['auto', 'auto']} />
                   <Tooltip 
                     contentStyle={{ 
-                      background: 'rgba(15, 23, 42, 0.95)', 
+                      background: 'rgba(13, 18, 30, 0.95)', 
                       border: '1px solid rgba(255, 255, 255, 0.08)', 
                       borderRadius: '16px',
                       color: '#fff',
@@ -441,7 +648,7 @@ export const Dashboard: React.FC = () => {
                   <Area 
                     type="monotone" 
                     dataKey="power" 
-                    stroke="#3b82f6" 
+                    stroke="#0ea0ea" 
                     strokeWidth={2.5} 
                     fillOpacity={1} 
                     fill="url(#livePowerGrad)" 
@@ -452,15 +659,18 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Appliance Controller list */}
+      {/* Appliance Controller & Distribution heatmaps */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Appliance Control Board */}
         <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between">
           <div>
-            <h2 className="font-extrabold text-slate-800 dark:text-white text-lg">Appliance Control Board</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Toggle smart home devices directly</p>
+            <h3 className="font-extrabold text-white text-base">Smart Appliance Controls</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Toggle and monitor home loads instantly</p>
           </div>
 
-          <div className="my-6 space-y-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
+          <div className="my-5 space-y-3.5 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
             {appliances.length === 0 ? (
               <div className="text-center py-8 text-xs font-semibold text-slate-400">
                 No appliances seeded.
@@ -469,33 +679,28 @@ export const Dashboard: React.FC = () => {
               appliances.map((app) => (
                 <div 
                   key={app.id} 
-                  className={`flex items-center justify-between rounded-2xl border p-4 transition-all duration-300 ${
+                  className={`flex items-center justify-between rounded-2xl border p-3.5 transition-all duration-300 ${
                     app.status 
-                      ? 'border-brand-500/20 bg-brand-500/5 dark:bg-brand-500/10' 
-                      : 'border-slate-200/80 dark:border-slate-800/80 bg-white/5 dark:bg-darkbg-card/5'
+                      ? 'border-brand-500/20 bg-brand-500/5' 
+                      : 'border-white/5 bg-white/5'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`rounded-xl p-2.5 ${
-                      app.status ? 'bg-brand-500/20 text-brand-500' : 'bg-slate-500/10 text-slate-400'
+                      app.status ? 'bg-brand-500/20 text-brand-400' : 'bg-white/5 text-slate-500'
                     }`}>
                       {getApplianceIcon(app.category)}
                     </div>
                     <div>
-                      <span className="block text-sm font-bold text-slate-800 dark:text-white">{app.name}</span>
+                      <span className="block text-sm font-bold text-white">{app.name}</span>
                       <div className="flex flex-col gap-0.5">
-                        <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                           Location: {app.location}
                         </span>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[9px] font-bold text-brand-500 bg-brand-500/10 px-1.5 py-0.5 rounded">
-                            AI XGBoost: {getDisaggregatedPrediction(app).toFixed(2)} kW
+                          <span className="text-[9px] font-bold text-brand-400 bg-brand-500/10 px-1.5 py-0.5 rounded border border-brand-500/10">
+                            XGBoost: {getDisaggregatedPrediction(app).toFixed(2)} kW
                           </span>
-                          {app.status && (
-                            <span className="text-[9px] font-medium text-slate-400">
-                              (Actual: {app.power_consumed.toFixed(2)} kW)
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -506,9 +711,9 @@ export const Dashboard: React.FC = () => {
                     className="focus:outline-none transition-all duration-200 active:scale-95"
                   >
                     {app.status ? (
-                      <ToggleRight className="h-9 w-9 text-brand-500" />
+                      <ToggleRight className="h-9 w-9 text-brand-400" />
                     ) : (
-                      <ToggleLeft className="h-9 w-9 text-slate-300 dark:text-slate-700" />
+                      <ToggleLeft className="h-9 w-9 text-slate-650" />
                     )}
                   </button>
                 </div>
@@ -516,64 +721,58 @@ export const Dashboard: React.FC = () => {
             )}
           </div>
 
-          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4 text-[11px] text-amber-600 dark:text-amber-400 font-semibold leading-relaxed">
-            💡 <strong>Smart Link Mode</strong> is active. Turning appliances ON/OFF instantly modifies the simulated current load across all WebSocket clients!
-          </div>
-        </div>
-      </div>
-
-      {/* Hourly / Daily Heatmap grid */}
-      <div className="glass-panel rounded-3xl p-6">
-        <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-extrabold text-slate-800 dark:text-white text-lg">Power Distribution Heatmap</h2>
-            <p className="text-xs text-slate-400 mt-0.5">7-Day calendar visualization of system load levels by hour</p>
-          </div>
-          <div className="flex items-center gap-4 text-[10px] font-bold text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded bg-emerald-500/30" /> Low standby ({"<"} 0.5 kW)
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded bg-amber-400/70" /> Moderate load (0.5 - 1.2 kW)
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded bg-rose-500/80" /> Peak spike ({">"} 1.2 kW)
-            </span>
+          <div className="rounded-2xl bg-amber-500/5 border border-amber-500/15 p-4 text-[10px] text-amber-400 font-semibold leading-relaxed">
+            ⚡ Clicking buttons updates appliance states. These changes modify active smart simulation metrics instantly across client sessions!
           </div>
         </div>
 
-        {/* Heatmap Grid Wrapper */}
-        <div className="overflow-x-auto pb-2 scrollbar-thin">
-          <div className="min-w-[800px] space-y-2">
-            {/* Hour Headers */}
-            <div className="flex items-center pl-10 text-[9px] font-extrabold text-slate-400/80 tracking-wider">
-              {Array.from({ length: 24 }).map((_, i) => (
-                <div key={i} className="w-full text-center">
-                  {i === 0 ? '12A' : i === 12 ? '12P' : i > 12 ? `${i - 12}P` : `${i}A`}
+        {/* Heatmap Grid */}
+        <div className="glass-panel rounded-3xl p-6 lg:col-span-2 flex flex-col justify-between">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="font-extrabold text-white text-base">Power Load Heatmap</h3>
+              <p className="text-xs text-slate-400 mt-0.5">7-Day calendar visualization of historical load levels</p>
+            </div>
+            <div className="flex items-center gap-3 text-[9px] font-bold text-slate-400">
+              <span className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded bg-emerald-500/20" /> Low ({"<"} 0.5 kW)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded bg-amber-500/50" /> Mid (0.5 - 1.2 kW)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded bg-rose-500/80" /> Peak ({">"} 1.2 kW)
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto pb-1 scrollbar-thin">
+            <div className="min-w-[650px] space-y-2">
+              <div className="flex items-center pl-10 text-[9px] font-bold text-slate-500 tracking-wider">
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <div key={i} className="w-full text-center">
+                    {i === 0 ? '12A' : i === 12 ? '12P' : i > 12 ? `${i - 12}P` : `${i}A`}
+                  </div>
+                ))}
+              </div>
+
+              {daysOfWeek.map((day, dayIndex) => (
+                <div key={day} className="flex items-center">
+                  <div className="w-10 text-xs font-bold text-slate-450 pr-2">
+                    {day}
+                  </div>
+                  <div className="flex-1 flex gap-1">
+                    {Array.from({ length: 24 }).map((_, hour) => (
+                      <div 
+                        key={hour} 
+                        className={`h-7 w-full rounded-md transition-all duration-200 cursor-pointer ${getHeatmapColor(dayIndex, hour)}`} 
+                        title={`${day} at ${hour}:00 - Average load metrics`}
+                      />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
-
-            {/* Heatmap Rows */}
-            {daysOfWeek.map((day, dayIndex) => (
-              <div key={day} className="flex items-center">
-                {/* Day label */}
-                <div className="w-10 text-xs font-bold text-slate-400 dark:text-slate-500 pr-2">
-                  {day}
-                </div>
-                
-                {/* Hour boxes */}
-                <div className="flex-1 flex gap-1">
-                  {Array.from({ length: 24 }).map((_, hour) => (
-                    <div 
-                      key={hour} 
-                      className={`h-7 w-full rounded-md transition-all duration-200 cursor-pointer ${getHeatmapColor(dayIndex, hour)}`} 
-                      title={`${day} at ${hour}:00 - Simulated average load levels`}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </div>

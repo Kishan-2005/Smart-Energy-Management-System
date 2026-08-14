@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Cpu, Power, Zap, RefreshCw, BarChart2 } from 'lucide-react';
+import { Cpu, Power, Zap, RefreshCw, BarChart2, CheckCircle2 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { CardSkeleton, ListSkeleton } from '../components/LoadingSkeleton';
 
 interface Appliance {
   id: number;
@@ -75,16 +76,22 @@ export const ApplianceAnalytics: React.FC = () => {
   const COLORS = ['#0ea0ea', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#ef4444'];
 
   const getGradeColor = (grade: string) => {
-    if (grade.startsWith('A')) return 'text-emerald-500 bg-emerald-500/10';
-    if (grade.startsWith('B')) return 'text-blue-500 bg-blue-500/10';
-    if (grade.startsWith('C')) return 'text-amber-500 bg-amber-500/10';
-    return 'text-red-500 bg-red-500/10';
+    if (grade.startsWith('A')) return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+    if (grade.startsWith('B')) return 'text-blue-400 bg-blue-500/10 border-blue-500/20';
+    if (grade.startsWith('C')) return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+    return 'text-rose-400 bg-rose-500/10 border-rose-500/20';
   };
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+      <div className="space-y-8">
+        <div className="grid gap-6 sm:grid-cols-3">
+          {[1, 2, 3].map((i) => <CardSkeleton key={i} />)}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2"><ListSkeleton /></div>
+          <div><ListSkeleton /></div>
+        </div>
       </div>
     );
   }
@@ -93,64 +100,75 @@ export const ApplianceAnalytics: React.FC = () => {
     <div className="space-y-8">
       {/* Overview Cards */}
       <div className="grid gap-6 sm:grid-cols-3">
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Appliances Connected</span>
+        {/* Connected stats */}
+        <div className="glass-panel rounded-3xl p-6 hover:scale-[1.02] cursor-pointer transition-all duration-300">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Devices Connected</span>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">{appliances.length}</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">({appliances.filter(a => a.status).length} running)</span>
+            <span className="text-3xl font-black text-white">{appliances.length}</span>
+            <span className="text-xs font-semibold text-slate-400">({appliances.filter(a => a.status).length} running)</span>
           </div>
         </div>
 
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Appliance Load Draw</span>
+        {/* Aggregate Draw */}
+        <div className="glass-panel glow-brand rounded-3xl p-6 hover:scale-[1.02] cursor-pointer transition-all duration-300">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Appliance Load Draw</span>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">
+            <span className="text-3xl font-black text-white">
               {appliances.reduce((acc, app) => acc + (app.status ? app.power_consumed : 0), 0).toFixed(2)} kW
             </span>
           </div>
         </div>
 
-        <div className="glass-panel rounded-2xl p-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Overall Efficiency Index</span>
+        {/* Efficiency Grade */}
+        <div className="glass-panel glow-emerald rounded-3xl p-6 hover:scale-[1.02] cursor-pointer transition-all duration-300">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Home Efficiency Index</span>
           <div className="mt-4 flex items-center justify-between">
-            <span className="text-3xl font-bold tracking-tight text-slate-800 dark:text-white">Grade A</span>
-            <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-500">Optimal</span>
+            <span className="text-2xl font-black text-white">GRADE A</span>
+            <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-450 border border-emerald-500/20">
+              OPTIMAL
+            </span>
           </div>
         </div>
       </div>
 
+      {error && (
+        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-xs font-semibold text-rose-500">
+          ⚠️ {error}
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Appliances Control List */}
-        <div className="glass-panel rounded-2xl p-6 lg:col-span-2 space-y-6">
+        <div className="glass-panel rounded-3xl p-6 lg:col-span-2 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold text-slate-800 dark:text-white text-lg">Connected Devices</h2>
-              <p className="text-xs text-slate-400 mt-1">Control smart switches and inspect appliance performance</p>
+              <h2 className="font-extrabold text-white text-lg">Connected Devices</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Control smart switches and inspect appliance parameters</p>
             </div>
             <button 
               onClick={fetchAppliances}
-              className="rounded-xl border border-slate-200/80 p-2.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800/80 dark:bg-darkbg-card dark:text-slate-400 dark:hover:bg-slate-800"
+              className="rounded-xl border border-white/5 p-2.5 text-slate-400 hover:bg-white/5 transition-all duration-200 active:scale-95"
             >
               <RefreshCw className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+          <div className="divide-y divide-white/5">
             {appliances.map((app) => (
               <div key={app.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-4">
                   <div className={`rounded-xl p-3 ${
-                    app.status ? 'bg-brand-500/10 text-brand-500' : 'bg-slate-100 text-slate-400 dark:bg-slate-900/50'
+                    app.status ? 'bg-brand-500/20 text-brand-400' : 'bg-white/5 text-slate-500'
                   }`}>
                     <Cpu className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">{app.appliance_name}</h3>
+                    <h3 className="font-bold text-white text-sm">{app.appliance_name}</h3>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {app.status ? `${app.power_consumed} kW` : 'Idle'}
+                      <span className="text-xs font-bold text-slate-450">
+                        {app.status ? `${app.power_consumed.toFixed(2)} kW` : 'Idle'}
                       </span>
-                      <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${getGradeColor(app.efficiency_grade)}`}>
+                      <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-bold border ${getGradeColor(app.efficiency_grade)}`}>
                         Grade {app.efficiency_grade}
                       </span>
                     </div>
@@ -161,10 +179,10 @@ export const ApplianceAnalytics: React.FC = () => {
                 <button
                   onClick={() => handleToggle(app.id, app.status)}
                   disabled={togglingId === app.id}
-                  className={`rounded-xl p-2.5 transition-all ${
+                  className={`rounded-xl p-2.5 transition-all active:scale-95 ${
                     app.status 
-                      ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' 
-                      : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-900/50 dark:text-slate-500 dark:hover:bg-slate-900'
+                      ? 'bg-rose-500/10 text-rose-450 border border-rose-500/25 hover:bg-rose-500/20' 
+                      : 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/25 hover:bg-emerald-500/20'
                   }`}
                   aria-label={`Toggle ${app.appliance_name}`}
                 >
@@ -176,18 +194,18 @@ export const ApplianceAnalytics: React.FC = () => {
         </div>
 
         {/* Recharts Breakdown Pie */}
-        <div className="glass-panel rounded-2xl p-6 flex flex-col justify-between">
+        <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between">
           <div>
-            <h2 className="font-bold text-slate-800 dark:text-white text-lg">Load Breakdown</h2>
-            <p className="text-xs text-slate-400 mt-1">Breakdown of active consumption load by active appliance</p>
+            <h2 className="font-extrabold text-white text-lg">Load Breakdown</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Breakdown of active consumption load</p>
           </div>
 
-          <div className="h-64 w-full my-6">
+          <div className="h-64 w-full my-6 flex items-center justify-center">
             {chartData.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-slate-400">
+              <div className="flex h-full items-center justify-center text-slate-500">
                 <div className="flex flex-col items-center gap-2 text-center">
-                  <BarChart2 className="h-8 w-8 text-slate-500" />
-                  <span className="text-xs">No appliances currently drawing active power</span>
+                  <BarChart2 className="h-8 w-8 text-slate-650" />
+                  <span className="text-xs font-semibold">No appliances currently drawing active power</span>
                 </div>
               </div>
             ) : (
@@ -208,9 +226,9 @@ export const ApplianceAnalytics: React.FC = () => {
                   </Pie>
                   <Tooltip
                     contentStyle={{
-                      background: 'rgba(22, 31, 48, 0.95)',
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
-                      borderRadius: '12px',
+                      background: 'rgba(13, 18, 30, 0.95)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '16px',
                       color: '#fff',
                       fontSize: '11px'
                     }}
@@ -221,8 +239,8 @@ export const ApplianceAnalytics: React.FC = () => {
             )}
           </div>
 
-          <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 p-4 text-xs text-amber-600 dark:text-amber-400 font-medium">
-            ⚠️ EV Charger is currently inactive. Consider activating smart scheduled charging to initiate overnight during off-peak times.
+          <div className="rounded-2xl bg-amber-500/5 border border-amber-500/15 p-4 text-xs text-amber-400 leading-relaxed font-semibold">
+            ⚠️ Automated charging schedules can postpone high EV charging spikes to off-peak slots to minimize billing utility fees.
           </div>
         </div>
       </div>
