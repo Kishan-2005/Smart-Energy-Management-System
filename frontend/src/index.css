@@ -185,3 +185,56 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* Animated background mesh layer */
+.mesh-gradient-bg {
+  background: radial-gradient(at 0% 0%, rgba(14, 160, 234, 0.05) 0px, transparent 50%),
+              radial-gradient(at 100% 0%, rgba(20, 184, 166, 0.05) 0px, transparent 50%),
+              radial-gradient(at 50% 100%, rgba(99, 102, 241, 0.03) 0px, transparent 50%),
+              #060913;
+  background-attachment: fixed;
+}
+
+/* Skeleton shimmer sweep */
+.skeleton-shine {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.03) 20%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerSweep 1.6s infinite linear;
+}
+
+@keyframes shimmerSweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* Floating bubble animation for charging battery cell */
+.bubble-particle {
+  animation: floatUp 2.5s infinite ease-out;
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(30px) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  80% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-20px) scale(1);
+    opacity: 0;
+  }
+}

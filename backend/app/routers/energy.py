@@ -555,11 +555,83 @@ def get_history_metrics(limit: int = 60, db: Session = Depends(get_db), current_
 
 # Helper for time-based aggregations
 def get_aggregated_metrics(db: Session, freq: str):
-    import pandas as pd
+    try:
+        import pandas as pd
+        HAS_PANDAS = True
+    except ImportError:
+        HAS_PANDAS = False
+
     metrics = db.query(EnergyMetric).order_by(EnergyMetric.timestamp.asc()).all()
     if not metrics:
         return []
     
+    if not HAS_PANDAS:
+        # Pure-Python fallback when pandas library is blocked
+        groups = {}
+        for m in metrics:
+            ts = m.timestamp
+            if freq == 'D':
+                group_key = ts.date()
+                date_label = group_key.strftime("%Y-%m-%d")
+            elif freq == 'W':
+                # Sunday as start of week
+                offset = (ts.weekday() + 1) % 7
+                start_of_week = ts.date() - datetime.timedelta(days=offset)
+                group_key = start_of_week
+                date_label = "Week " + start_of_week.strftime("%U (%b %d)")
+            elif freq == 'M':
+                # Start of month for sorting, string for grouping
+                sort_date = datetime.date(ts.year, ts.month, 1)
+                date_label = ts.strftime("%B %Y")
+                group_key = (sort_date, date_label)
+            
+            if group_key not in groups:
+                groups[group_key] = {
+                    "date_label": date_label,
+                    "active_power": [],
+                    "voltage": [],
+                    "current": [],
+                    "frequency": [],
+                    "energy_consumed_kwh": []
+                }
+            groups[group_key]["active_power"].append(m.active_power)
+            groups[group_key]["voltage"].append(m.voltage)
+            groups[group_key]["current"].append(m.current)
+            groups[group_key]["frequency"].append(m.frequency)
+            groups[group_key]["energy_consumed_kwh"].append(m.energy_consumed_kwh)
+            
+        sorted_keys = sorted(groups.keys())
+        result = []
+        prev_max_energy = None
+        mult = 24.0 if freq == 'D' else 168.0 if freq == 'W' else 720.0
+        
+        for key in sorted_keys:
+            g = groups[key]
+            avg_active = sum(g["active_power"]) / len(g["active_power"]) if g["active_power"] else 0.0
+            avg_voltage = sum(g["voltage"]) / len(g["voltage"]) if g["voltage"] else 0.0
+            avg_current = sum(g["current"]) / len(g["current"]) if g["current"] else 0.0
+            avg_frequency = sum(g["frequency"]) / len(g["frequency"]) if g["frequency"] else 0.0
+            max_energy = max(g["energy_consumed_kwh"]) if g["energy_consumed_kwh"] else 0.0
+            
+            if prev_max_energy is None:
+                net_consumption = avg_active * mult
+            else:
+                net_consumption = max_energy - prev_max_energy
+                
+            prev_max_energy = max_energy
+            
+            result.append({
+                "date_label": g["date_label"],
+                "avg_active_power": round(avg_active, 3),
+                "avg_voltage": round(avg_voltage, 1),
+                "avg_current": round(avg_current, 2),
+                "avg_frequency": round(avg_frequency, 2),
+                "max_energy_kwh": round(max_energy, 2),
+                "net_consumption_kwh": round(max(0.0, net_consumption), 2)
+            })
+            
+        return result
+
     data = [{
         "timestamp": m.timestamp,
         "active_power": m.active_power,

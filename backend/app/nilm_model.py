@@ -2,21 +2,33 @@ import os
 import pickle
 import datetime
 import random
-import numpy as np
-import pandas as pd
+HAS_ML = True
+try:
+    import numpy as np
+    import pandas as pd
+    HAS_ML = True
+except ImportError:
+    HAS_ML = False
+    print("[NILM-AI] WARNING: ML libraries (numpy/pandas) could not be loaded due to security/policy controls.")
+    print("[NILM-AI] Falling back to pure Python rule-based disaggregation.")
 
 # Fallback check: If Windows Application Control blocks xgboost.dll, use scikit-learn Gradient Boosting
 HAS_XGBOOST = False
-try:
-    import xgboost as xgb
-    # Simple check to see if DLL loads without triggering WinError 4551
-    test_reg = xgb.XGBRegressor(n_estimators=1)
-    HAS_XGBOOST = True
-    print("[NILM-AI] XGBoost library imported and verified successfully.")
-except Exception as e:
-    print(f"[NILM-AI] WARNING: XGBoost C++ library loading failed: {e}")
-    print("[NILM-AI] Falling back to Scikit-Learn GradientBoostingRegressor (100% compliant).")
-    from sklearn.ensemble import GradientBoostingRegressor
+if HAS_ML:
+    try:
+        import xgboost as xgb
+        # Simple check to see if DLL loads without triggering WinError 4551
+        test_reg = xgb.XGBRegressor(n_estimators=1)
+        HAS_XGBOOST = True
+        print("[NILM-AI] XGBoost library imported and verified successfully.")
+    except Exception as e:
+        print(f"[NILM-AI] WARNING: XGBoost C++ library loading failed: {e}")
+        print("[NILM-AI] Falling back to Scikit-Learn GradientBoostingRegressor (100% compliant).")
+        try:
+            from sklearn.ensemble import GradientBoostingRegressor
+        except ImportError:
+            HAS_ML = False
+            print("[NILM-AI] WARNING: Scikit-Learn could not be loaded. Falling back to pure Python models.")
 
 MODEL_FILE = os.path.join(os.path.dirname(__file__), "nilm_xgb_models.pkl")
 _loaded_models = None
@@ -79,6 +91,9 @@ def train_nilm_models():
     Fits 5 separate Gradient Boosting regressors (XGBoost or Scikit-Learn fallback) 
     to disaggregate aggregate active power.
     """
+    if not HAS_ML:
+        print("[NILM-AI] Skipping training, ML libraries are not available.")
+        return True
     df = generate_ukdale_synthetic_data()
     X = df[["aggregate", "hour", "day_of_week"]].values
     
@@ -127,6 +142,65 @@ def predict_disaggregated_loads(aggregate_kw: float, timestamp: datetime.datetim
     """
     Infers the disaggregated appliance loads from the aggregate power.
     """
+    if not HAS_ML:
+        # Heuristics based on active periods and aggregate power when ML packages are blocked
+        hour = timestamp.hour
+        day_of_week = timestamp.weekday()
+
+        # Standard standby power is 0.05 kW
+        standby = 0.05
+        remaining = max(0.0, aggregate_kw - standby)
+
+        # Refrigerator: active 1/3 of the time, draws ~0.18 kW
+        fridge_on = ((timestamp.minute + timestamp.hour * 60) // 20) % 3 == 0
+        fridge_val = 0.18 if (fridge_on and remaining >= 0.15) else 0.0
+        remaining = max(0.0, remaining - fridge_val)
+
+        # TV: active 5 PM - 11 PM, draws ~0.12 kW
+        tv_on = 17 <= hour <= 23
+        tv_val = 0.12 if (tv_on and remaining >= 0.10) else 0.0
+        remaining = max(0.0, remaining - tv_val)
+
+        # Fan: active 10 AM - 6 PM, draws ~0.07 kW
+        fan_on = 10 <= hour <= 18
+        fan_val = 0.07 if (fan_on and remaining >= 0.05) else 0.0
+        remaining = max(0.0, remaining - fan_val)
+
+        # AC: active 11 AM - 5 PM, draws ~1.80 kW
+        ac_on = 11 <= hour <= 17
+        ac_val = 1.80 if (ac_on and remaining >= 1.20) else 0.0
+        if aggregate_kw >= 2.0 and not ac_val:
+            ac_val = min(remaining, 1.80)
+        remaining = max(0.0, remaining - ac_val)
+
+        # Washing Machine: weekend days 8 AM - 4 PM, draws ~1.20 kW
+        wm_on = day_of_week >= 5 and 8 <= hour <= 16
+        wm_val = 1.20 if (wm_on and remaining >= 0.80) else 0.0
+        if remaining >= 1.0 and not wm_val and not ac_val:
+            if day_of_week >= 5:
+                wm_val = min(remaining, 1.20)
+            else:
+                ac_val = min(remaining, 1.80)
+        remaining = max(0.0, remaining - wm_val)
+
+        # Build disaggregated predictions
+        predictions = {
+            "fan": round(fan_val, 3),
+            "tv": round(tv_val, 3),
+            "refrigerator": round(fridge_val, 3),
+            "washing_machine": round(wm_val, 3),
+            "ac": round(ac_val, 3)
+        }
+
+        # Normalize to aggregate_kw exactly if we have any active appliance
+        total_predicted = sum(predictions.values()) + standby
+        if total_predicted > 0:
+            factor = aggregate_kw / total_predicted
+            for k in predictions:
+                predictions[k] = round(predictions[k] * factor, 3)
+                
+        return predictions
+
     global _loaded_models
     
     if _loaded_models is None:
